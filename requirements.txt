@@ -1,0 +1,10 @@
+dotmap
+numpy
+scipy
+jupyter
+cython
+matplotlib
+pandas
+pybullet
+quadprog
+tqdm
