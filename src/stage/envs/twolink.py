@@ -9,19 +9,19 @@ import gym
 from gym import utils
 import pybullet as p
 from dotmap import DotMap
-from stage.envs.base import BaseEnv
+from clmbrl.envs.base import BaseEnv
 import torch
 
 class TwoLinkEnv(BaseEnv):
     metadata = {'render.modes': ['human', 'rgb_array'], 'video.frames_per_second': 50}
     nq, nv, nu, nx = 2, 2, 2, 4
-    dt = 0.001
 
-    def __init__(self, dt, step_cost, do_render=False):
+    def __init__(self, dt, step_cost=None, do_render=False):
         super().__init__(dt, step_cost, do_render)
         dir_path = os.path.dirname(os.path.realpath(__file__))
         self.robot_urdf = os.path.join(dir_path, 'urdf/twolink.urdf')
         self.action_space = gym.spaces.Box(-50, 50,(self.nu,))
+        self.reset()
 
     def step(self, tau=None):
         if tau is None:
