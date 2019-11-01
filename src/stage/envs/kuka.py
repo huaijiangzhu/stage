@@ -9,7 +9,7 @@ import gym
 from gym import utils
 import pybullet as p
 from dotmap import DotMap
-from clmbrl.envs.base import BaseEnv
+from stage.envs.base import BaseEnv
 import torch
 
 class KukaEnv(BaseEnv):
