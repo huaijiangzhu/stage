@@ -2,10 +2,10 @@ from gym.envs.registration import register
 
 register(
     id='Kuka-v0',
-    entry_point='clmbrl.envs.kuka:KukaEnv'
+    entry_point='stage.envs.kuka:KukaEnv'
 )
 
 register(
     id='TwoLink-v0',
-    entry_point='clmbrl.envs.twolink:TwoLinkEnv'
+    entry_point='stage.envs.twolink:TwoLinkEnv'
 )

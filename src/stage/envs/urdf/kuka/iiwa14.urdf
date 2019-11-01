@@ -4,9 +4,14 @@
 <robot name="KUKAiiwa14">
 
   <link name="iiwaBase">
-    
+    <inertial>
+      <origin xyz="0.00000 0.00000 0.00000"/>
+      <mass value="0.0"/>
+      <inertia ixx="0.05" ixy="0" ixz="0" iyy="0.06" iyz="0" izz="0.03"/> 
+    </inertial>
+   
     <visual>
-      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />            
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />           
       <geometry>
         <mesh filename="mesh/iiwa14_base.stl" scale="0.001 0.001 0.001" />
       </geometry>
@@ -25,7 +30,7 @@
     <visual>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
       <geometry>
-	<mesh filename="mesh/iiwa14_link1.stl" scale="0.001 0.001 0.001" />
+	    <mesh filename="mesh/iiwa14_link1.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     
@@ -43,7 +48,7 @@
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
       <geometry>
 	<!--cylinder radius="0.12" length="0.2045"/-->
-	<mesh filename="mesh/iiwa14_link2.stl" scale="0.001 0.001 0.001" />
+	    <mesh filename="mesh/iiwa14_link2.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     
@@ -61,7 +66,7 @@
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
       <geometry>
 	<!--cylinder radius="0.12" length="0.2155"/-->
-	<mesh filename="mesh/iiwa14_link3.stl" scale="0.001 0.001 0.001" />
+	    <mesh filename="mesh/iiwa14_link3.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     
@@ -79,7 +84,7 @@
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
       <geometry>
 	<!--cylinder radius="0.1" length="0.1845"/-->
-	<mesh filename="mesh/iiwa14_link4.stl" scale="0.001 0.001 0.001" />
+	    <mesh filename="mesh/iiwa14_link4.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     
@@ -97,7 +102,7 @@
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
       <geometry>
 	<!--cylinder radius="0.08" length="0.2155"/-->
-	<mesh filename="mesh/iiwa14_link5.stl" scale="0.001 0.001 0.001" />
+	    <mesh filename="mesh/iiwa14_link5.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     
@@ -116,7 +121,7 @@
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
       <geometry>
 	<!--cylinder radius="0.06" length="0.081"/-->
-	<mesh filename="mesh/iiwa14_link6.stl" scale="0.001 0.001 0.001" />
+	    <mesh filename="mesh/iiwa14_link6.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     
@@ -134,7 +139,7 @@
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
       <geometry>
 	<!--cylinder radius="0.03" length="0.0451"/-->
-	<mesh filename="mesh/iiwa14_link7.stl" scale="0.001 0.001 0.001" />
+	    <mesh filename="mesh/iiwa14_link7.stl" scale="0.001 0.001 0.001" />
       </geometry>
     </visual>
     
@@ -145,8 +150,9 @@
     <origin xyz="0.00000 0.00000 0.15750" rpy="0.0 0.0 0.0"/>
     <parent link="iiwaBase"/>
     <child  link="L1"/>
-    <limit effort="30" velocity="1.0"/>
+    <limit effort="30" lower="-2.96705972839" upper="2.96705972839" velocity="1.0"/>
     <axis xyz="0 0 1"/>
+    
     
   </joint>
   
@@ -155,8 +161,9 @@
     <origin xyz="0.00000 0.00000 0.20250" rpy="2.3561944901923457 -1.5707962635746238 2.3561944901923457"/>
     <parent link="L1"/>
     <child  link="L2"/>
-    <limit effort="30" velocity="1.0"/>
+    <limit effort="30" lower="-2.09439510239" upper="2.09439510239" velocity="1.0"/>
     <axis xyz="0 0 1"/>
+    
     
   </joint>
   
@@ -165,8 +172,9 @@
     <origin xyz="0.20450 0.00000 0.00000" rpy="1.5707963267948948 -4.371139000186238E-8 1.5707963705062866"/>
     <parent link="L2"/>
     <child  link="L3"/>
-    <limit effort="30" velocity="1.0"/>
+    <limit effort="30" lower="-2.96705972839" upper="2.96705972839" velocity="1.0"/>
     <axis xyz="0 0 1"/>
+    
     
   </joint>
   
@@ -175,9 +183,10 @@
     <origin xyz="0.00000 0.00000 0.21550" rpy="1.5707963705062866 -0.0 0.0"/>
     <parent link="L3"/>
     <child  link="L4"/>
-    <limit effort="30" velocity="1.0"/>
+    <limit effort="30" lower="-2.09439510239" upper="2.09439510239" velocity="1.0"/>
     <axis xyz="0 0 1"/>
     
+
   </joint>
   
   <joint name="A5" type="revolute">
@@ -185,8 +194,9 @@
     <origin xyz="0.00000 0.18450 0.00000" rpy="-1.5707963705062866 0.0 -0.0"/>
     <parent link="L4"/>
     <child  link="L5"/>
-    <limit effort="30" velocity="1.0"/>
+    <limit effort="30" lower="-2.96705972839" upper="2.96705972839" velocity="1.0"/>
     <axis xyz="0 0 1"/>
+    
     
   </joint>
   
@@ -195,8 +205,9 @@
     <origin xyz="0.00000 -0.06070 0.21550" rpy="2.3561944901923457 -1.5707962635746238 2.3561944901923457"/>
     <parent link="L5"/>
     <child  link="L6"/>
-    <limit effort="30" velocity="1.0"/>
+    <limit effort="30" lower="-2.09439510239" upper="2.09439510239" velocity="1.0"/>
     <axis xyz="0 0 1"/>
+    
     
   </joint>
   
@@ -205,8 +216,9 @@
     <origin xyz="0.08100 0.00000 0.06070" rpy="1.5707963267948948 -4.371139000186238E-8 1.5707963705062866"/>
     <parent link="L6"/>
     <child  link="L7"/>
-    <limit effort="30" velocity="1.0"/>
+    <limit effort="30" lower="-3.05432619099" upper="3.05432619099" velocity="1.0"/>
     <axis xyz="0 0 1"/>
+    
     
   </joint>
 </robot>

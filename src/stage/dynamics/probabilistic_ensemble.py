@@ -29,18 +29,16 @@ class ProbabilisticEnsemble(Dynamics):
         dx_pred, var_pred = self.dx(xa)
         return x + dx_pred, var_pred
 
-    def unroll(self, obs, action_traj, horizon, controller, n_particles=20):
-
+    def unroll(self, obs, action_traj, n_particles=20):
+        # TODO: support unroll with different initial conditions/nultiple action sequences
         assert n_particles % self.ensemble_size == 0
-        # TODO: support unroll with different initial conditions
+        horizon, na = action_traj.shape
         obs = obs.reshape((1, -1))
         # obs : (1, nx)
         obs = obs.expand(n_particles, -1)
         # obs : (n_particles, nx)
-        na = int(len(action_traj)/horizon)
-
         action_traj = action_traj.view(-1, horizon, na)
-        action_traj = action_traj.expand(n_particles, -1, -1    )
+        action_traj = action_traj.expand(n_particles, -1, -1)
         # action_traj : (n_particles, horizon, na)
         action_traj = action_traj.transpose(0, 1)
         # action_traj : (horizon, n_particles, na)
@@ -49,21 +47,18 @@ class ProbabilisticEnsemble(Dynamics):
         for n in range(horizon):
             obs_traj.append(obs)
             a = action_traj[n]
-            next_obs, u = self.sample_predictions(obs, a, controller, n_particles)
+            next_obs, _ = self.sample_predictions(obs, a, n_particles)
             obs = next_obs
         obs_traj = torch.stack(obs_traj, dim=0)
         return obs_traj
 
-    def sample_predictions(self, obs, a, controller, n_particles):
-        u = controller(obs, a)
+    def sample_predictions(self, obs, a, n_particles):
         obs = self.group_as_ensemble(obs, n_particles)
-        if self.learn_closed_loop_dynamics:
-            mean, var = self.forward(obs, self.group_as_ensemble(a, n_particles))
-        else:
-            mean, var = self.forward(obs, self.group_as_ensemble(u, n_particles))
+        mean, var = self.forward(obs, self.group_as_ensemble(a, n_particles))
         samples = mean + torch.randn_like(mean) * var.sqrt()
         samples = self.flatten_ensemble(samples, n_particles)
-        return samples, u
+        mean = self.flatten_ensemble(mean, n_particles)
+        return samples, mean
 
     def group_as_ensemble(self, arr, n_particles):
         dim = arr.shape[-1]

@@ -30,11 +30,36 @@ class TSMPCCost(nn.Module):
         for n in range(self.horizon):
             obs.requires_grad_(True)
             a = action_traj[n]
-            next_obs, u = self.dynamics.sample_predictions(obs, a, self.inner_loop_controller, self.n_particles)
-            cost = self.obs_cost(next_obs) + self.action_cost(u) 
+            b, _ = obs.shape
+            ns = 0
+
+            u = self.inner_loop_controller(obs, a)
+            obs = obs.repeat(ns + 1, 1)
+            a = a.repeat(ns + 1, 1)
+
+            # regularize Lipschitz samples
+            perturbation = torch.empty(obs.shape).normal_(mean=0, std=0.05)
+            perturbation[:b] = 0
+            next_obs, mean = self.dynamics.sample_predictions(obs + perturbation, a, self.n_particles)
+
+            if ns > 0:
+                ref = next_obs[:b]
+                ref = ref.repeat(ns + 1, 1)
+                deviation = next_obs - ref
+                norm_deviation = torch.norm(deviation, p=2, dim=1)
+                norm_pertubation = torch.norm(perturbation, p=2, dim=1)
+                L = norm_deviation[b:]/norm_pertubation[b:]
+                reg = 0
+                for s in range(ns):
+                    reg += L[b*s:b*(s+1)]
+                reg = reg/ns
+                cost = self.obs_cost(next_obs[:b]) + self.action_cost(u) + 0.1 * reg
+            else:
+                cost = self.obs_cost(next_obs[:b]) + self.action_cost(u)
+            
             cost = cost.view(-1, self.n_particles)
             costs += cost
-            obs = next_obs
+            obs = next_obs[:b]
         
         # Replace nan with high cost
         costs[costs != costs] = 1e6

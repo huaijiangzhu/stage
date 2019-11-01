@@ -22,6 +22,7 @@ class KukaEnv(BaseEnv):
         self.robot_urdf = os.path.join(dir_path, 'urdf/kuka/iiwa14.urdf')
         self.action_space = gym.spaces.Box(-30, 30,(self.nu,))
         self.reset()
+        
 
     def step(self, tau=None):
         if tau is None:

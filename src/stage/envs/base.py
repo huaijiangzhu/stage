@@ -65,7 +65,7 @@ class BaseEnv(gym.Env):
 
     def reset(self, init_state=None):
         p.setTimeStep(self.dt)
-        p.setGravity(0, 0, -9.81)
+        p.setGravity(0, 0, 0)
 
         ## TODO take care of floating base system
 
