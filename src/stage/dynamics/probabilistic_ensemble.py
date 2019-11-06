@@ -10,13 +10,14 @@ import tqdm
 
 class ProbabilisticEnsemble(Dynamics):
     def __init__(self, nq, nv, na, dt, dx, 
-                 ensemble_size=5, learn_closed_loop_dynamics=False):
+                 ensemble_size=5, learn_closed_loop_dynamics=False,
+                 learning_rate=0.005):
         super().__init__(nq, nv, na, dt)
         self.learn_closed_loop_dynamics = learn_closed_loop_dynamics
         self.nin = self.nx + self.na
         self.nout = 2 * self.nx
         self.dx = dx(ensemble_size, self.nx, self.na)
-        self.opt = optim.Adam(self.dx.parameters(), lr=0.001)
+        self.opt = optim.Adam(self.dx.parameters(), lr=learning_rate)
         self.ensemble_size = ensemble_size
 
     def forward(self, x, a):

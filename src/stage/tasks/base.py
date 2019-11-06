@@ -63,7 +63,7 @@ class Task(object):
         return x, reward, done, info
 
 
-    def visualize_training_data(self, data_train=None):
+    def visualize_training_data(self, data_train=None, it_begin=0):
         ## This only works for episodic tasks
         assert self.env.do_render == True
 
@@ -75,14 +75,14 @@ class Task(object):
         n_steps = data_train.shape[0]
         n_rollouts = int(n_steps/self.task_horizon)
 
-        for i in range(n_rollouts):
+        for i in range(it_begin, n_rollouts):
             q = data_train[i*self.task_horizon:(i+1)*self.task_horizon, :self.nq]
             v = data_train[i*self.task_horizon:(i+1)*self.task_horizon, self.nq:self.nx]
             time.sleep(2)
             for n in range(self.task_horizon):
                 self.env.set_state(q[n], v[n])
                 time.sleep(self.dt_control)
-        self.env.close()
+        # self.env.close()
 
     def save_training_data(self, path):
         assert self.data_train is not None

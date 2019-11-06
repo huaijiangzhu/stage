@@ -1,1 +1,1 @@
-docker run -it --rm -p 8890:8890 -v $(pwd):/root/clmbrl --gpus all clmbrl
+docker run -it --rm -p 8890:8890 -v $(pwd):/root/clmbrl --gpus '"device=0"' clmbrl

@@ -25,14 +25,16 @@ from stage.utils.nn import swish, get_affine_params, truncated_normal
 
 class KukaPETS(Task):
     env_name = "Kuka-v0"
-    task_horizon = 200
+    task_horizon = 150
     train_iterations = 20
     rollouts_per_iteration = 1
-    plan_horizon = 40
-    n_particles = 30
-    pop_size = 600
-    ensemble_size = 6
+    plan_horizon = 30
+    n_particles = 20
+    pop_size = 400
+    ensemble_size = 5
     nn_epochs = 20
+    batch_size = 32
+    learning_rate = 0.001
     nq, nv, nu, nx = 7, 7, 7, 14
     goal = np.array([0.2, 0.5, 0.1])
     
@@ -91,10 +93,13 @@ class KukaPETS(Task):
         if self.learn_closed_loop_dynamics:
             self.dynamics = ProbabilisticEnsemble(self.nq, self.nv, self.na, self.dt_control, 
                                                   self.dx, self.ensemble_size, 
-                                                  learn_closed_loop_dynamics=True)
+                                                  learn_closed_loop_dynamics=True, 
+                                                  learning_rate=self.learning_rate)
         else:
             self.dynamics = ProbabilisticEnsemble(self.nq, self.nv, self.nu, self.dt_control, 
-                                                  self.dx, self.ensemble_size)
+                                                  self.dx, self.ensemble_size, 
+                                                  learn_closed_loop_dynamics=True, 
+                                                  learning_rate=self.learning_rate)
 
         if path is not None:
             self.dynamics.dx.load_state_dict(torch.load(path))
@@ -184,11 +189,11 @@ class KukaPETS(Task):
 class KukaDx(Dx):
     def __init__(self, ensemble_size, nx, na):
         super().__init__(ensemble_size, nx, na)
-        self.lin0_w, self.lin0_b = get_affine_params(self.ensemble_size, self.nin, 200)
-        self.lin1_w, self.lin1_b = get_affine_params(self.ensemble_size, 200, 200)
-        self.lin2_w, self.lin2_b = get_affine_params(self.ensemble_size, 200, 200)
-        self.lin3_w, self.lin3_b = get_affine_params(self.ensemble_size, 200, 200)
-        self.lin4_w, self.lin4_b = get_affine_params(self.ensemble_size, 200, self.nout)
+        self.lin0_w, self.lin0_b = get_affine_params(self.ensemble_size, self.nin, 300)
+        self.lin1_w, self.lin1_b = get_affine_params(self.ensemble_size, 300, 300)
+        self.lin2_w, self.lin2_b = get_affine_params(self.ensemble_size, 300, 300)
+        self.lin3_w, self.lin3_b = get_affine_params(self.ensemble_size, 300, 300)
+        self.lin4_w, self.lin4_b = get_affine_params(self.ensemble_size, 300, self.nout)
         
     def forward(self, inputs, return_logvar=False):
 
@@ -220,11 +225,11 @@ class KukaDx(Dx):
 
     def compute_decays(self):
 
-        lin0_decays = 0.000025 * (self.lin0_w ** 2).sum() / 2.0
-        lin1_decays = 0.00005 * (self.lin1_w ** 2).sum() / 2.0
-        lin2_decays = 0.000075 * (self.lin2_w ** 2).sum() / 2.0
-        lin3_decays = 0.000075 * (self.lin3_w ** 2).sum() / 2.0
-        lin4_decays = 0.0001 * (self.lin4_w ** 2).sum() / 2.0
+        lin0_decays = 0.000075 * (self.lin0_w ** 2).sum() / 2.0
+        lin1_decays = 0.000025 * (self.lin1_w ** 2).sum() / 2.0
+        lin2_decays = 0.000025 * (self.lin2_w ** 2).sum() / 2.0
+        lin3_decays = 0.000025 * (self.lin3_w ** 2).sum() / 2.0
+        lin4_decays = 0.000075 * (self.lin4_w ** 2).sum() / 2.0
 
         return lin0_decays + lin1_decays + lin2_decays + lin3_decays + lin4_decays
 

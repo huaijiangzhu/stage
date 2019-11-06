@@ -91,6 +91,19 @@ class TwoLinkEnv(BaseEnv):
         rgb_array = rgb_array[:, :, :3]
         return rgb_array
 
+    def get_state(self, q, v):
+        q = np.zeros(self.nq)
+        v = np.zeros(self.nv)
+
+        # Query the joint readings.
+        joint_states = p.getJointStates(self.robot_id, self.bullet_joint_ids)
+
+        for i in range(self.nv):
+            q[i] = joint_states[i][0]
+            v[i] = joint_states[i][1]
+
+        return q, v
+
     def set_state(self, q, v):
         for i in range(self.nj):
             p.resetJointState(self.robot_id, i, q[i], v[i])

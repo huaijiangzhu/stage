@@ -26,17 +26,10 @@ class BaseEnv(gym.Env):
         raise NotImplementedError
 
     def get_state(self):
-        q = np.zeros(self.nq)
-        v = np.zeros(self.nv)
+        raise NotImplementedError
 
-        # Query the joint readings.
-        joint_states = p.getJointStates(self.robot_id, self.bullet_joint_ids)
-
-        for i in range(self.nv):
-            q[i] = joint_states[i][0]
-            v[i] = joint_states[i][1]
-
-        return q, v
+    def set_state(self, q, v):
+        raise NotImplementedError
 
     def load_body(self, body_urdf, use_fixed_base=True):
         body_id = p.loadURDF(body_urdf, useFixedBase=use_fixed_base)
@@ -58,10 +51,9 @@ class BaseEnv(gym.Env):
         v = np.zeros(self.nv)
         if init_state is not None:
             q, v = init_state
+        self.set_state(q, v)
 
         ## TODO take care of floating base system
-        for i in range(self.nj):
-            p.resetJointState(self.robot_id, i, q[i], v[i])
 
     def reset(self, init_state=None):
         p.setTimeStep(self.dt)
