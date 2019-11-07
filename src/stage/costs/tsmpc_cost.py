@@ -31,7 +31,7 @@ class TSMPCCost(nn.Module):
             obs.requires_grad_(True)
             a = action_traj[n]
             b, _ = obs.shape
-            ns = 0
+            ns = 2
 
             u = self.inner_loop_controller(obs, a)
             obs = obs.repeat(ns + 1, 1)

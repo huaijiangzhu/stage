@@ -29,9 +29,9 @@ class KukaPETS(Task):
     train_iterations = 20
     rollouts_per_iteration = 1
     plan_horizon = 30
-    n_particles = 20
+    n_particles = 10
     pop_size = 400
-    ensemble_size = 5
+    ensemble_size = 2
     nn_epochs = 20
     batch_size = 32
     learning_rate = 0.001
@@ -59,8 +59,8 @@ class KukaPETS(Task):
 
         if action_parameterization=='pd':
             self.na = 14
-            gain_ub = 5 * torch.ones((self.nq))
-            gain_lb = 0.01 * torch.ones((self.nq))
+            gain_ub = torch.Tensor([30, 15, 30, 30, 5, 3, 0.1])
+            gain_lb = 0. * torch.ones((self.nq))
 
             self.action_ub = torch.cat((gain_ub, q_ub))
             self.action_lb = torch.cat((gain_lb, q_lb))
