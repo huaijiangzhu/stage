@@ -31,7 +31,7 @@ class ProbabilisticEnsemble(Dynamics):
         return x + dx_pred, var_pred
 
     def unroll(self, obs, action_traj, n_particles=20):
-        # TODO: support unroll with different initial conditions/nultiple action sequences
+        # TODO: support unroll with different initial conditions/multiple action sequences
         assert n_particles % self.ensemble_size == 0
         horizon, na = action_traj.shape
         obs = obs.reshape((1, -1))

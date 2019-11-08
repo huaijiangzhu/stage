@@ -31,9 +31,9 @@ class KukaPETS(Task):
     plan_horizon = 30
     n_particles = 10
     pop_size = 400
-    ensemble_size = 2
-    nn_epochs = 20
-    batch_size = 32
+    ensemble_size = 5
+    nn_epochs = 10
+    batch_size = 64
     learning_rate = 0.001
     nq, nv, nu, nx = 7, 7, 7, 14
     goal = np.array([0.2, 0.5, 0.1])
@@ -117,7 +117,7 @@ class KukaPETS(Task):
             if self.data_train is None:
                 self.data_train, log = self.unroll(x, random=True)
                 end = time.time()
-                self.dynamics.learn(self.data_train, self.nn_epochs, verbose=verbose)
+                self.dynamics.learn(self.data_train, self.nn_epochs, batch_size=self.batch_size, verbose=verbose)
             else:
                 new_data, log = self.unroll(x, random=False)
                 end = time.time()
