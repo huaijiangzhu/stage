@@ -37,6 +37,16 @@ class CEM(Optimizer):
                                    0.1 * samples[:, i - 1, :]
             samples = samples.view(self.popsize, -1)
             costs = cost_function(samples)
+
+            # Replace NaNs and Infs with the non-inf maximum 
+            # Warning: this assumes that there is no -inf in the costs!
+            costs_finite = costs[torch.isfinite(costs)]
+            if len(costs_finite) != 0:
+                max_cost_finite = torch.max(costs_finite)
+            else:
+                max_cost_finite = 0
+            costs[costs != costs] = max_cost_finite
+            costs[torch.isinf(costs)] = max_cost_finite
             
             elites = samples[torch.argsort(costs)][:self.num_elites]
             opt = costs[torch.argsort(costs)][:self.num_elites]

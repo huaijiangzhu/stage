@@ -16,8 +16,6 @@ from stage.controllers.trivial import Identity, OpenLoop
 from stage.controllers.pd import PD, PDFull
 
 from stage.controllers.tsmpc import TSMPC
-from stage.optimizers.cem import CEM
-from stage.costs.tsmpc_cost import TSMPCCost
 from stage.costs.step_cost import StepCost
 
 from stage.dynamics.probabilistic_ensemble import ProbabilisticEnsemble, Dx

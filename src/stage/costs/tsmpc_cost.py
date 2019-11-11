@@ -1,12 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from tqdm import trange
-
 from stage.controllers.base import Controller
-from stage.optimizers.cem import CEM
-from stage.utils.nn import truncated_normal
 
 class TSMPCCost(nn.Module):
     def __init__(self, horizon, n_particles, pop_size,
@@ -60,9 +54,6 @@ class TSMPCCost(nn.Module):
             cost = cost.view(-1, self.n_particles)
             costs += cost
             obs = next_obs[:b]
-        
-        # Replace nan with high cost
-        costs[costs != costs] = 1e6
 
         return costs.mean(dim=1)
 
