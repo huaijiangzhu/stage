@@ -20,7 +20,7 @@ class KukaEnv(BaseEnv):
         super().__init__(dt, step_cost, do_render)
         dir_path = os.path.dirname(os.path.realpath(__file__))
         self.robot_urdf = os.path.join(dir_path, 'urdf/kuka/iiwa14.urdf')
-        self.action_space = gym.spaces.Box(-30, 30,(self.nu,))
+        self.action_space = gym.spaces.Box(-10, 10,(self.nu,))
         self.reset()
         
 

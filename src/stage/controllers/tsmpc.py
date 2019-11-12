@@ -7,6 +7,7 @@ from tqdm import trange
 from stage.controllers.base import Controller
 from stage.costs.tsmpc_cost import TSMPCCost
 from stage.optimizers.cem import CEM
+from stage.optimizers.pi2 import PI2
 from stage.utils.nn import truncated_normal
 
 class TSMPC(nn.Module):
@@ -23,9 +24,7 @@ class TSMPC(nn.Module):
         self.plan_horizon, self.n_particles = plan_horizon, n_particles
         self.pop_size = pop_size
 
-        self.optimizer = CEM(sol_dim=self.plan_horizon * self.na, 
-                             max_iters=5, popsize=self.pop_size, 
-                             num_elites=int(self.pop_size/10), alpha=0.1,
+        self.optimizer = PI2(na=self.na, horizon=self.plan_horizon, pop_size=self.pop_size,
                              upper_bound=self.action_ub.repeat(self.plan_horizon),
                              lower_bound=self.action_lb.repeat(self.plan_horizon))
 
@@ -65,7 +64,7 @@ class TSMPC(nn.Module):
             a = truncated_normal(mean.shape, mean, torch.sqrt(constrained_var))
 
         else:
-            sol, _, opt = self.optimizer(self.cost, self.prev_sol, self.init_var)
+            sol, _, _ = self.optimizer(self.cost, self.prev_sol, self.init_var)
             self.prev_sol = torch.cat((sol[self.na:], (self.action_lb + self.action_ub)/2))
             a = sol[:self.na]
 
