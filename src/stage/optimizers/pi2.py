@@ -4,13 +4,15 @@ from scipy.stats import truncnorm
 import numpy as np
 
 import torch
+import torch.nn.functional as F
+import pdb
 
 class PI2(Optimizer):
 
     def __init__(self, na, horizon,
                  upper_bound=None, lower_bound=None,
-                 pop_size=400, max_iters=3, 
-                 epsilon=0.001, alpha=0.1, gamma=0.8):
+                 pop_size=400, max_iters=5, 
+                 epsilon=0.001, alpha=0.2, gamma=0.5):
         super().__init__()
         self.na, self.horizon = na, horizon
         self.pop_size, self.max_iters = pop_size, max_iters
@@ -48,32 +50,20 @@ class PI2(Optimizer):
             costs[costs != costs] = max_cost_finite
             costs[torch.isinf(costs)] = max_cost_finite
 
-            # Normalization to [0, 10] (is this necessary and numerically stable?)
-            costs = (costs - torch.min(costs))/(torch.max(costs) - torch.min(costs))
+            # Normalize to [0, 10] so that exp behaves well (is this numerically stable?)
+            costs = (costs - torch.min(costs))/(torch.max(costs) - torch.min(costs) + 1e-6)
             costs = 10 * costs
-            # print (samples[0, :7])
 
-            # Not necessary but good for debugging
-            samples = samples[torch.argsort(costs)]
-            # print (samples[0, :7])
-
-            # Weighting the sequences by cost exponentionals
-            S = torch.exp(-self.gamma * (costs))
-            normalizer = torch.sum(S)
-
-            S = S.reshape((-1, 1))
-            S = S.expand(-1, samples.shape[1])
-            samples_weighted = S * samples
-
-            # print (torch.sum(samples_weighted, dim=0)[:7])
-            # print (samples_weighted[0, :7])
-            new_mean = torch.sum(samples_weighted, dim=0) / normalizer
-            # print (new_mean[:7])
-
-            # new_var = torch.var(elites, dim=0)
+            # Weighting the action sequences by softmax
+            P = F.softmax(-self.gamma * (costs), dim=0)
+            if len(P[P!=P])!=0:
+                pdb.set_trace()
+            new_mean = torch.sum(P * samples.T, dim=1)
+            samples_centered = samples - new_mean
+            new_var = torch.diag(torch.mm(P * samples_centered.T, samples_centered))
 
             mean = self.alpha * mean + (1 - self.alpha) * new_mean
-            # var = self.alpha * var + (1 - self.alpha) * new_var
+            var = self.alpha * var + (1 - self.alpha) * new_var
             t += 1
 
 
