@@ -4,6 +4,7 @@ from scipy.stats import truncnorm
 import numpy as np
 
 import torch
+import pdb
 
 class CEM(Optimizer):
 
@@ -24,21 +25,16 @@ class CEM(Optimizer):
 
     def forward(self, cost_function, init_mean, init_var):
 
-        mean, var, t = init_mean, init_var, 0
-        while (t < self.max_iters) and torch.max(var) > self.epsilon:
+        mean, var, i = init_mean, init_var, 0
+        while (i < self.max_iters) and torch.max(var) > self.epsilon:
             
             lb_dist, ub_dist = mean - self.lb, self.ub - mean
             constrained_var = torch.min(torch.min((lb_dist / 2)**2, (ub_dist / 2)**2), var)
             samples = truncated_normal((self.pop_size, self.sol_dim), mean, torch.sqrt(constrained_var))
 
-            ## smooth action sequence
-            samples = samples.view(self.pop_size, -1, self.na)
-            for i in range(1, samples.shape[1]):
-                samples[:, i, :] = 0.9 * samples[:, i, :] + \
-                                   0.1 * samples[:, i - 1, :]
-            samples = samples.view(self.pop_size, -1)
-
             costs = cost_function(samples)
+            if len(samples[samples != samples])!=0:
+                pdb.set_trace()
 
             # Replace NaNs and Infs with the non-inf maximum 
             # Warning: this assumes that there is no -inf in the costs!
@@ -51,16 +47,15 @@ class CEM(Optimizer):
             costs[torch.isinf(costs)] = max_cost_finite
             
             elites = samples[torch.argsort(costs)][:self.num_elites]
-            opt = costs[torch.argsort(costs)][:self.num_elites]
-            opt = torch.mean(opt, dim=0)
-
             new_mean = torch.mean(elites, dim=0)
             new_var = torch.var(elites, dim=0)
 
             mean = self.alpha * mean + (1 - self.alpha) * new_mean
             var = self.alpha * var + (1 - self.alpha) * new_var
 
-            t += 1
+            i += 1
 
-        return mean, var, opt
+        # print (cost_function(mean.expand(self.pop_size, -1))[0])
+
+        return mean, var, None
 
