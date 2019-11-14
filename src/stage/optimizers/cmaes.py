@@ -11,14 +11,14 @@ class CMAES(Optimizer):
 
     def __init__(self, na, horizon,
                  upper_bound=None, lower_bound=None,
-                 pop_size=400, max_iters=5, 
-                 epsilon=0.001, alpha=0.1, gamma=0.75):
+                 pop_size=400, max_iters=3, 
+                 epsilon=0.001, alpha=0.1, gamma=0.7):
         super().__init__()
         self.na, self.horizon = na, horizon
         self.pop_size, self.max_iters = pop_size, max_iters
         self.epsilon, self.alpha, self.gamma = epsilon, alpha, gamma
         self.reset(na * horizon, upper_bound, lower_bound)
-        self.num_elites = int(self.pop_size/5)
+        self.num_elites = int(self.pop_size/10)
 
     def reset(self, sol_dim, upper_bound, lower_bound):
         self.sol_dim = sol_dim
@@ -28,7 +28,7 @@ class CMAES(Optimizer):
 
         mean, var, i = init_mean, init_var, 0
 
-        while i < self.max_iters:
+        while i < self.max_iters and torch.max(var) > self.epsilon:
             lb_dist, ub_dist = mean - self.lb, self.ub - mean
             constrained_var = torch.min(torch.min((lb_dist / 2)**2, (ub_dist / 2)**2), var)
             samples = truncated_normal((self.pop_size, self.sol_dim), mean, torch.sqrt(constrained_var))
@@ -44,16 +44,16 @@ class CMAES(Optimizer):
             costs[costs != costs] = max_cost_finite
             costs[torch.isinf(costs)] = max_cost_finite
 
+            # Normalize to [0, 10] so that exp behaves well (is this numerically stable?)
+            costs = (costs - torch.min(costs))/(torch.max(costs) - torch.min(costs) + 1e-6)
+            costs = 10 * costs
+
             # Pick elites
             # Theoretically we should be able to have num_elites = pop_size
             # But that leads to slow convergence in the beginning of the training
             costs, idx_costs = torch.sort(costs)
             elites = samples[idx_costs][:self.num_elites]
             costs = costs[:self.num_elites]
-
-            # Normalize to [0, 10] so that exp behaves well (is this numerically stable?)
-            costs = (costs - torch.min(costs))/(torch.max(costs) - torch.min(costs) + 1e-6)
-            costs = 10 * costs
 
             # Weighting the action sequences by softmax
             P = F.softmax(-self.gamma * (costs), dim=0)
