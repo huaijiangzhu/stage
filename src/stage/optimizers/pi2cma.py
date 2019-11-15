@@ -12,13 +12,12 @@ class PI2CMA(Optimizer):
     def __init__(self, na, horizon,
                  upper_bound=None, lower_bound=None,
                  pop_size=400, max_iters=5, 
-                 epsilon=0.001, alpha=0.1, gamma=0.99):
+                 epsilon=0.001, alpha=0.1, gamma=10.0):
         super().__init__()
         self.na, self.horizon = na, horizon
         self.pop_size, self.max_iters = pop_size, max_iters
         self.epsilon, self.alpha, self.gamma = epsilon, alpha, gamma
         self.reset(na * horizon, upper_bound, lower_bound)
-        self.num_elites = int(self.pop_size)
 
     def reset(self, sol_dim, upper_bound, lower_bound):
         self.sol_dim = sol_dim
@@ -29,6 +28,8 @@ class PI2CMA(Optimizer):
         mean, var, i = init_mean, init_var, 0
 
         while i < self.max_iters and torch.max(var) > self.epsilon:
+            self.gamma = 1.0 / torch.max(var)
+
             lb_dist, ub_dist = mean - self.lb, self.ub - mean
             constrained_var = torch.min(torch.min((lb_dist / 2)**2, (ub_dist / 2)**2), var)
             samples = truncated_normal((self.pop_size, self.sol_dim), mean, torch.sqrt(constrained_var))
@@ -52,11 +53,10 @@ class PI2CMA(Optimizer):
             costs_to_go[costs_to_go != costs_to_go] = max_cost_finite
             costs_to_go[torch.isinf(costs_to_go)] = max_cost_finite
 
-            # Normalize so that exp behaves well (is this numerically stable?)
+            # Normalize so that exp behaves well
             cmin = torch.min(costs_to_go, dim=0)[0]
             cmax = torch.max(costs_to_go, dim=0)[0]
             costs_to_go = (costs_to_go - cmin)/(cmax - cmin + 1e-6)
-            costs_to_go = 10 * costs_to_go
 
             # Weighting the action sequences by softmax
             P = F.softmax(-self.gamma * (costs_to_go), dim=0)
