@@ -19,7 +19,7 @@ class TSMPCCost(nn.Module):
     def forward(self, action_traj):
         action_traj = self.reshape_action_traj(action_traj)
         obs = self.reshape_obs(self.obs)
-        costs = torch.zeros(self.pop_size, self.n_particles)        
+        costs = torch.zeros(self.pop_size, self.horizon)        
 
         for n in range(self.horizon):
             obs.requires_grad_(True)
@@ -52,10 +52,10 @@ class TSMPCCost(nn.Module):
                 cost = self.obs_cost(next_obs[:b]) + self.action_cost(u)
             
             cost = cost.view(-1, self.n_particles)
-            costs += cost
+            costs[:, n] = cost.mean(dim=1)
             obs = next_obs[:b]
 
-        return costs.mean(dim=1)
+        return costs
 
     def reshape_action_traj(self, action_traj):
         # action_traj : (pop_size, horizon*nu)

@@ -7,7 +7,7 @@ from tqdm import trange
 from stage.controllers.base import Controller
 from stage.costs.tsmpc_cost import TSMPCCost
 from stage.optimizers.cem import CEM
-from stage.optimizers.cmaes import CMAES
+from stage.optimizers.pi2cma import PI2CMA
 from stage.utils.nn import truncated_normal
 
 class TSMPC(nn.Module):
@@ -24,7 +24,7 @@ class TSMPC(nn.Module):
         self.plan_horizon, self.n_particles = plan_horizon, n_particles
         self.pop_size = pop_size
 
-        self.optimizer = CMAES(na=self.na, horizon=self.plan_horizon, pop_size=self.pop_size,
+        self.optimizer = PI2CMA(na=self.na, horizon=self.plan_horizon, pop_size=self.pop_size,
                              upper_bound=self.action_ub.repeat(self.plan_horizon),
                              lower_bound=self.action_lb.repeat(self.plan_horizon))
 

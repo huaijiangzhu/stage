@@ -1,11 +1,18 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from scipy.stats import truncnorm
 
 def use_gpu():
     torch.set_default_tensor_type(torch.cuda.FloatTensor if torch.cuda.is_available() 
                                                          else torch.FloatTensor)
+
+def flip(x, dim):
+    xsize = x.size()
+    dim = x.dim() + dim if dim < 0 else dim
+    x = x.view(-1, *xsize[dim:])
+    x = x.view(x.size(0), x.size(1), -1)[:, getattr(torch.arange(x.size(1)-1, 
+                      -1, -1), ('cpu','cuda')[x.is_cuda])().long(), :]
+    return x.view(xsize)
 
 def truncated_normal(shape, mean, std):
     tensor = torch.zeros(shape)

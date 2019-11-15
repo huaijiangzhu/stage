@@ -33,6 +33,8 @@ class CEM(Optimizer):
             samples = truncated_normal((self.pop_size, self.sol_dim), mean, torch.sqrt(constrained_var))
 
             costs = cost_function(samples)
+            costs = torch.sum(costs, dim=1)
+            
             if len(samples[samples != samples])!=0:
                 pdb.set_trace()
 
