@@ -12,11 +12,11 @@ class PI2CMA(Optimizer):
     def __init__(self, na, horizon,
                  upper_bound=None, lower_bound=None,
                  pop_size=400, max_iters=5, 
-                 epsilon=0.001, alpha=0.1, gamma=10.0):
+                 epsilon=0.001, alpha=0.1, h=10.0):
         super().__init__()
         self.na, self.horizon = na, horizon
         self.pop_size, self.max_iters = pop_size, max_iters
-        self.epsilon, self.alpha, self.gamma = epsilon, alpha, gamma
+        self.epsilon, self.alpha, self.h = epsilon, alpha, h
         self.reset(na * horizon, upper_bound, lower_bound)
 
     def reset(self, sol_dim, upper_bound, lower_bound):
@@ -28,7 +28,7 @@ class PI2CMA(Optimizer):
         mean, var, i = init_mean, init_var, 0
 
         while i < self.max_iters and torch.max(var) > self.epsilon:
-            self.gamma = 1.0 / torch.max(var)
+            self.h = 50.0 / torch.mean(var)
 
             lb_dist, ub_dist = mean - self.lb, self.ub - mean
             constrained_var = torch.min(torch.min((lb_dist / 2)**2, (ub_dist / 2)**2), var)
@@ -37,29 +37,29 @@ class PI2CMA(Optimizer):
 
             # Compute cost-to-go
             costs_flipped = flip(costs, dim=1)
-            costs_to_go = torch.zeros_like(costs)
-            costs_to_go[:, 0] = costs_flipped[:, 0]
+            S = torch.zeros_like(costs)
+            S[:, 0] = costs_flipped[:, 0]
             for k in range(1, self.horizon):
-                costs_to_go[:, k] = costs_flipped[:, k] + costs_to_go[:, k - 1]
-            costs_to_go = flip(costs_to_go, dim=1)
+                S[:, k] = costs_flipped[:, k] + S[:, k - 1]
+            S = flip(S, dim=1)
 
             # Replace NaNs and Infs with the non-inf maximum 
             # Warning: this assumes that there is no -inf in the costs!
-            costs_finite = costs_to_go[torch.isfinite(costs_to_go)]
+            costs_finite = S[torch.isfinite(S)]
             if len(costs_finite) != 0:
                 max_cost_finite = torch.max(costs_finite)
             else:
                 max_cost_finite = 0
-            costs_to_go[costs_to_go != costs_to_go] = max_cost_finite
-            costs_to_go[torch.isinf(costs_to_go)] = max_cost_finite
+            S[S != S] = max_cost_finite
+            S[torch.isinf(S)] = max_cost_finite
 
             # Normalize so that exp behaves well
-            cmin = torch.min(costs_to_go, dim=0)[0]
-            cmax = torch.max(costs_to_go, dim=0)[0]
-            costs_to_go = (costs_to_go - cmin)/(cmax - cmin + 1e-6)
+            Smin = torch.min(S, dim=0)[0]
+            Smax = torch.max(S, dim=0)[0]
+            S = (S - Smin)/(Smax - Smin + 1e-6)
 
             # Weighting the action sequences by softmax
-            P = F.softmax(-self.gamma * (costs_to_go), dim=0)
+            P = F.softmax(-self.h * (S), dim=0)
             P = P.view(self.pop_size, self.horizon, 1)
             samples = samples.view(self.pop_size, self.horizon, self.na)
 
