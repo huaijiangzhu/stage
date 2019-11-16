@@ -12,7 +12,7 @@ class PI2CMA(Optimizer):
     def __init__(self, na, horizon,
                  upper_bound=None, lower_bound=None,
                  pop_size=400, max_iters=5, 
-                 epsilon=0.001, alpha=0.1, h=10.0):
+                 epsilon=0.001, alpha=0.1, h=20.0):
         super().__init__()
         self.na, self.horizon = na, horizon
         self.pop_size, self.max_iters = pop_size, max_iters
@@ -28,7 +28,7 @@ class PI2CMA(Optimizer):
         mean, var, i = init_mean, init_var, 0
 
         while i < self.max_iters and torch.max(var) > self.epsilon:
-            self.h = 50.0 / torch.mean(var)
+            # self.h = 20.0 / torch.mean(var)
 
             lb_dist, ub_dist = mean - self.lb, self.ub - mean
             constrained_var = torch.min(torch.min((lb_dist / 2)**2, (ub_dist / 2)**2), var)

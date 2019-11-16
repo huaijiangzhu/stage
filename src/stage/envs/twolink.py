@@ -91,7 +91,7 @@ class TwoLinkEnv(BaseEnv):
         rgb_array = rgb_array[:, :, :3]
         return rgb_array
 
-    def get_state(self, q, v):
+    def get_state(self):
         q = np.zeros(self.nq)
         v = np.zeros(self.nv)
 
