@@ -24,7 +24,7 @@ class TSMPC(nn.Module):
         self.plan_horizon, self.n_particles = plan_horizon, n_particles
         self.pop_size = pop_size
 
-        self.optimizer = PI2CMA(na=self.na, horizon=self.plan_horizon, pop_size=self.pop_size,
+        self.optimizer = CEM(na=self.na, horizon=self.plan_horizon, pop_size=self.pop_size,
                              upper_bound=self.action_ub.repeat(self.plan_horizon),
                              lower_bound=self.action_lb.repeat(self.plan_horizon))
 
@@ -69,6 +69,9 @@ class TSMPC(nn.Module):
             a = sol[:self.na]
 
         return a
+
+    def regularize(self, ns):
+        self.cost.ns = ns
 
     def reset(self):
         self.optimizer.reset(sol_dim=self.plan_horizon * self.na,

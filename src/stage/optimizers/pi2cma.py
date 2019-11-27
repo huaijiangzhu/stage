@@ -76,6 +76,7 @@ class PI2CMA(Optimizer):
             
             mean = self.alpha * mean + (1 - self.alpha) * new_mean
             var = self.alpha * var + (1 - self.alpha) * new_var
+
             i += 1
 
         return mean, var, None

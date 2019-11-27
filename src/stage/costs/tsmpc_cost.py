@@ -16,16 +16,19 @@ class TSMPCCost(nn.Module):
         self.pop_size = pop_size
         self.step_cost = step_cost
 
+        # number of samples for Lipschitz regularization
+        self.ns = 0
+
     def forward(self, action_traj):
         action_traj = self.reshape_action_traj(action_traj)
         obs = self.reshape_obs(self.obs)
-        costs = torch.zeros(self.pop_size, self.horizon)        
+        costs = torch.zeros(self.pop_size, self.horizon)  
+        ns = self.ns      
 
         for n in range(self.horizon):
             obs.requires_grad_(True)
             a = action_traj[n]
             b, _ = obs.shape
-            ns = 0
 
             u = self.inner_loop_controller(obs, a)
             obs = obs.repeat(ns + 1, 1)
