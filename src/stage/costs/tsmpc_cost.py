@@ -35,7 +35,7 @@ class TSMPCCost(nn.Module):
             a = a.repeat(ns + 1, 1)
 
             # regularize Lipschitz samples
-            perturbation = torch.empty(obs.shape).normal_(mean=0, std=0.05)
+            perturbation = torch.empty(obs.shape).normal_(mean=0, std=0.1)
             perturbation[:b] = 0
             next_obs, mean = self.dynamics.sample_predictions(obs + perturbation, a, self.n_particles)
 

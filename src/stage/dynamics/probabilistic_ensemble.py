@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 import numpy as np
 
 from stage.dynamics.base import Dynamics
+from stage.utils.jacobian_reg import JacobianReg
 import tqdm
 
 class ProbabilisticEnsemble(Dynamics):
@@ -114,6 +115,8 @@ class Dx(nn.Module):
         self.inputs_sigma = nn.Parameter(torch.zeros(self.nin), requires_grad=False)
         self.max_logvar = nn.Parameter(torch.ones(1, self.nx) / 2.0)
         self.min_logvar = nn.Parameter(-torch.ones(1, self.nx) * 10.0)
+        self.jac_reg = JacobianReg(n=-1)
+        self.lambda_jac_reg = 0.01
 
     def normalize(self, inputs):
         mu = inputs.mean(dim=0)
@@ -128,7 +131,11 @@ class Dx(nn.Module):
         reg = 0.01 * (self.max_logvar.sum() - self.min_logvar.sum())
         reg += self.compute_decays()
 
+        xa.requires_grad = True
         dx_pred, logvar_pred = self.forward(xa, return_logvar=True)
+        jac_norm = self.jac_reg(xa, dx_pred)
+        reg += self.lambda_jac_reg * jac_norm
+        
         inv_var_pred = torch.exp(-logvar_pred)
 
         if mse:
@@ -140,7 +147,7 @@ class Dx(nn.Module):
             loss = ((dx_pred - dx) ** 2) * inv_var_pred + logvar_pred
             loss = torch.mean(loss)
             loss += reg            
-
         return loss
+
 
 
