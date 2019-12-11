@@ -4,12 +4,12 @@ from stage.controllers.base import Controller
 
 class TSMPCCost(nn.Module):
     def __init__(self, horizon, n_particles, pop_size,
-                 dynamics, inner_loop_controller, na, step_cost):
+                 dynamics, actor, step_cost):
         super().__init__()
         self.dynamics = dynamics
-        self.inner_loop_controller = inner_loop_controller
+        self.actor = actor
         self.nq, self.nv = dynamics.nq, dynamics.nv
-        self.na = na
+        self.na = actor.na
         self.ensemble_size = dynamics.ensemble_size
         self.horizon = horizon
         self.n_particles = n_particles
@@ -30,14 +30,14 @@ class TSMPCCost(nn.Module):
             a = action_traj[n]
             b, _ = obs.shape
 
-            u = self.inner_loop_controller(obs, a)
+            u = self.actor(obs, a)
             obs = obs.repeat(ns + 1, 1)
             a = a.repeat(ns + 1, 1)
 
             # regularize Lipschitz samples
             perturbation = torch.empty(obs.shape).normal_(mean=0, std=0.1)
             perturbation[:b] = 0
-            next_obs, mean = self.dynamics.sample_predictions(obs + perturbation, a, self.n_particles)
+            next_obs = self.dynamics.sample_predictions(obs + perturbation, a, self.n_particles)
 
             if ns > 0:
                 ref = next_obs[:b]

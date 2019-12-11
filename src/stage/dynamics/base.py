@@ -4,12 +4,12 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 class Dynamics(nn.Module):
-    def __init__(self, nq, nv, na, dt):
+    def __init__(self, nx, nq, nv, na, dt):
         super().__init__()
+        self.nx = nx
         self.nq = nq
         self.nv = nv
         self.na = na
-        self.nx = nq + nv
         self.dt = dt
 
     def forward(self, x, a):

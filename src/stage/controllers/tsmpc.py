@@ -12,14 +12,14 @@ from stage.utils.nn import truncated_normal
 
 class TSMPC(nn.Module):
 
-    def __init__(self, action_ub, action_lb, dynamics, step_cost,
-                 plan_horizon, n_particles, pop_size, inner_loop_controller):
+    def __init__(self, dynamics, step_cost, actor,
+                 plan_horizon, n_particles, pop_size):
         super().__init__()
         self.nq, self.nv = dynamics.nq, dynamics.nv
-        self.na = action_lb.shape[0]
+        self.actor = actor
+        self.na = actor.na
         self.dynamics = dynamics
-        self.action_ub, self.action_lb = action_ub, action_lb
-        self.inner_loop_controller = inner_loop_controller
+        self.action_ub, self.action_lb = actor.action_ub, actor.action_lb
 
         self.plan_horizon, self.n_particles = plan_horizon, n_particles
         self.pop_size = pop_size
@@ -29,7 +29,7 @@ class TSMPC(nn.Module):
                              lower_bound=self.action_lb.repeat(self.plan_horizon))
 
         self.cost = TSMPCCost(self.plan_horizon, self.n_particles, self.pop_size,
-                              self.dynamics, self.inner_loop_controller, self.na, step_cost)
+                              self.dynamics, self.actor, step_cost)
         self.prev_sol = ((self.action_lb + self.action_ub)/2).repeat(self.plan_horizon)
         self.init_var = ((self.action_ub - self.action_lb) **2 / 16).repeat(self.plan_horizon)
 

@@ -53,7 +53,7 @@ class Task(object):
         x0 = x.clone()
 
         for i in range(control_repetition):
-            u = torch.flatten(controller.inner_loop_controller(x, a))
+            u = torch.flatten(controller.actor(x, a))
             obs, reward, done, info = self.env.step(u)
             x = torch.Tensor(obs[:self.nx])
 

@@ -20,6 +20,7 @@ from stage.costs.step_cost import StepCost
 
 from stage.dynamics.probabilistic_ensemble import ProbabilisticEnsemble, Dx
 from stage.utils.nn import swish, get_affine_params, truncated_normal
+from stage.utils.actor import Actor
 
 class KukaPETS(Task):
     env_name = "Kuka-v0"
@@ -60,22 +61,20 @@ class KukaPETS(Task):
             gain_ub = torch.Tensor([30, 15, 30, 30, 5, 3, 0.1])
             gain_lb = 0. * torch.ones((self.nq))
 
-            self.action_ub = torch.cat((gain_ub, q_ub))
-            self.action_lb = torch.cat((gain_lb, q_lb))
-            self.inner_loop_controller = PD
+            action_ub = torch.cat((gain_ub, q_ub))
+            action_lb = torch.cat((gain_lb, q_lb))
+            self.actor = Actor(self.na, PD(self.nq, self.nv, self.nu), action_lb, action_ub)
 
         elif action_parameterization=='torque':
 
             self.na = 7
-            self.action_ub = torch.Tensor(self.env.action_space.high)
-            self.action_lb = torch.Tensor(self.env.action_space.low)
-            self.inner_loop_controller = Identity
+            action_ub = torch.Tensor(self.env.action_space.high)
+            action_lb = torch.Tensor(self.env.action_space.low)
+            self.actor = Actor(self.na, Identity(self.nq, self.nv, self.nu), action_lb, action_ub)
 
         self.load_dynamics(dynamics_path)
-        self.controller = TSMPC(self.action_ub, self.action_lb,
-                                self.dynamics, self.step_cost,
-                                self.plan_horizon, self.n_particles, self.pop_size,
-                                self.inner_loop_controller(self.nq, self.nv, self.nu))
+        self.controller = TSMPC(self.dynamics, self.step_cost, self.actor,
+                                self.plan_horizon, self.n_particles, self.pop_size)
         
 
     def update_goal(self, goal, noise=False):
@@ -139,7 +138,7 @@ class KukaPETS(Task):
         x0 = x.clone()
 
         for i in range(control_repetition):
-            u = torch.flatten(controller.inner_loop_controller(x, a))
+            u = torch.flatten(controller.actor(x, a))
             obs, reward, done, info = self.env.step(u)
             x = torch.Tensor(obs[:self.nx])
 
@@ -157,10 +156,10 @@ class KukaPETS(Task):
         x = self.reset(goal, noise=False)
         start = time.time()
         if action_sequence is not None:
-            openloop_controller = OpenLoop(self.nq, self.nv, self.nu, self.na, action_sequence)
-            openloop_controller.inner_loop_controller = self.controller.inner_loop_controller
+            openloop = OpenLoop(self.nq, self.nv, self.nu, self.na, action_sequence)
+            openloop.actor = self.actor
             params_generator = lambda n : n
-            data, log = self.unroll(x, openloop_controller, params_generator)
+            data, log = self.unroll(x, openloop, params_generator)
         else:
             data, log = self.unroll(x) 
         end = time.time()
