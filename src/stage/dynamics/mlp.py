@@ -69,6 +69,7 @@ class MLPDyn(Dynamics):
         return prediction
 
     def learn(self, data, epochs, batch_size=32, verbose=False):
+        self.dx.normalize(data[:, :self.nin])
         dataloader = DataLoader(data, batch_size=batch_size, shuffle=True)
         epoch_range = tqdm.trange(epochs, unit="epoch(s)", desc="Network training", disable=not verbose)
         self.dx.train()
@@ -96,10 +97,20 @@ class Dx(nn.Module):
         self.nx, self.na = nx, na
         self.nin = nx + na
         self.nout = 2 * nx
+        self.inputs_mu = nn.Parameter(torch.zeros(self.nin), requires_grad=False)
+        self.inputs_sigma = nn.Parameter(torch.zeros(self.nin), requires_grad=False)
         self.max_logvar = nn.Parameter(torch.ones(1, self.nx) / 2.0)
         self.min_logvar = nn.Parameter(-torch.ones(1, self.nx) * 10.0)
         self.jac_norm = JacobianNorm()
         self.lambda_jac_reg = 0.01
+
+    def normalize(self, inputs):
+        mu = inputs.mean(dim=0)
+        sigma = inputs.std(dim=0)
+        sigma[sigma < 1e-12] = 1.0
+
+        self.inputs_mu.data = mu.data
+        self.inputs_sigma.data = sigma.data
 
     def compute_loss(self, xa, dx, mse=False):
         # regularization
@@ -137,9 +148,11 @@ class DefaultDx(Dx):
     
     def forward(self, inputs, return_logvar=False):
 
+        inputs = (inputs - self.inputs_mu) / self.inputs_sigma
+
         inputs = swish(self.bn1(self.fc1(inputs)))
-        inputs = self.dropout(inputs)
         inputs = swish(self.bn2(self.fc2(inputs)))
+        inputs = self.dropout(inputs)
         inputs = swish(self.bn3(self.fc3(inputs)))
         inputs = self.fc4(inputs)
 

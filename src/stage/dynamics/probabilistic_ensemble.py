@@ -200,11 +200,11 @@ class DefaultDx(Dx):
 
     def compute_decays(self):
 
-        lin0_decays = 0.000075 * (self.lin0_w ** 2).sum() / 2.0
-        lin1_decays = 0.000025 * (self.lin1_w ** 2).sum() / 2.0
-        lin2_decays = 0.000025 * (self.lin2_w ** 2).sum() / 2.0
-        lin3_decays = 0.000025 * (self.lin3_w ** 2).sum() / 2.0
-        lin4_decays = 0.000075 * (self.lin4_w ** 2).sum() / 2.0
+        lin0_decays = 0.00025 * (self.lin0_w ** 2).sum() / 2.0
+        lin1_decays = 0.0005 * (self.lin1_w ** 2).sum() / 2.0
+        lin2_decays = 0.0005 * (self.lin2_w ** 2).sum() / 2.0
+        lin3_decays = 0.0005 * (self.lin3_w ** 2).sum() / 2.0
+        lin4_decays = 0.00075 * (self.lin4_w ** 2).sum() / 2.0
 
         return lin0_decays + lin1_decays + lin2_decays + lin3_decays + lin4_decays
 
