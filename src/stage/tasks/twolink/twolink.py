@@ -23,7 +23,7 @@ from stage.costs.step_cost import StepCost
 from stage.dynamics.probabilistic_ensemble import ProbabilisticEnsemble, Dx
 from stage.utils.nn import swish, get_affine_params, truncated_normal
 
-class TwoLinkPETS(Task):
+class TwoLinkReaching(Task):
     env_name = "TwoLink-v0"
     task_horizon = 100
     train_iterations = 20

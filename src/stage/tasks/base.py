@@ -42,10 +42,10 @@ class Task(object):
         data = torch.stack(data)
         return data, log
 
-    def act(self, obs, controller, params, random):
+    def act(self, x, controller, params, random):
         control_repetition = int(self.dt_control/self.dt_env)
-        a = controller(obs, params, random)
-        x0 = obs[:self.nx].clone()
+        a = controller(x, params, random)
+        x0 = x.clone()
 
         for i in range(control_repetition):
             u = torch.flatten(controller.actor(x, a))

@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 
-
 class Actor(nn.Module):
 
     def __init__(self, na, decoder,
@@ -9,11 +8,12 @@ class Actor(nn.Module):
                  normalize=False):
         super().__init__()
         self.na = na
+        self.nq, self.nv, self.nu = decoder.nq, decoder.nv, decoder.nu
         self.decoder = decoder
         self.action_lb, self.action_ub = action_lb, action_ub
 
-    def forward(self, obs, a):
-        return self.decoder(obs, a)
+    def forward(self, x, a):
+        return self.decoder(x, a)
 
     ## TODO: normalize/sampling etc...
         

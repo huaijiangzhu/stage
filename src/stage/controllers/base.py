@@ -16,3 +16,6 @@ class Controller(nn.Module):
 
     def wrap(self, q):
         return torch.atan2(torch.sin(q), torch.cos(q))
+
+    def reset(self):
+        pass

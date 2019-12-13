@@ -7,7 +7,7 @@ import numpy as np
 
 from stage.dynamics.base import Dynamics
 from stage.utils.nn import swish, get_affine_params, truncated_normal
-from stage.utils.jacobian import JacobianNorm
+from stage.utils.jacobian import JacobianNormEnsemble
 import tqdm
 
 class ProbabilisticEnsemble(Dynamics):
@@ -94,6 +94,7 @@ class ProbabilisticEnsemble(Dynamics):
         self.dx.normalize(data[:, :self.nin])
         dataloader = DataLoader(data, batch_size=batch_size, shuffle=True)
         epoch_range = tqdm.trange(epochs, unit="epoch(s)", desc="Network training", disable=not verbose)
+        self.dx.train()
         for _ in epoch_range:
             for i, sample in enumerate(dataloader):
 
@@ -114,6 +115,7 @@ class ProbabilisticEnsemble(Dynamics):
             dx = dx.repeat(self.ensemble_size, 1, 1)
             mse = self.dx.compute_loss(xa, dx, mse=True)
             epoch_range.set_postfix({"Training loss MSE": mse.detach().cpu().numpy()})
+        self.dx.eval()
 
 class Dx(nn.Module):
     def __init__(self, ensemble_size, nx, na):
@@ -125,7 +127,7 @@ class Dx(nn.Module):
         self.inputs_sigma = nn.Parameter(torch.zeros(self.nin), requires_grad=False)
         self.max_logvar = nn.Parameter(torch.ones(1, self.nx) / 2.0)
         self.min_logvar = nn.Parameter(-torch.ones(1, self.nx) * 10.0)
-        self.jac_norm = JacobianNorm()
+        self.jac_norm = JacobianNormEnsemble()
         self.lambda_jac_reg = 0.01
 
     def normalize(self, inputs):
@@ -143,7 +145,7 @@ class Dx(nn.Module):
 
         xa.requires_grad = True
         dx_pred, logvar_pred = self.forward(xa, return_logvar=True)
-        jac_norm = self.jac_norm(xa, dx_pred)
+        jac_norm = self.jac_norm(dx_pred, xa)
         reg += self.lambda_jac_reg * jac_norm
         
         inv_var_pred = torch.exp(-logvar_pred)

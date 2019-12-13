@@ -6,9 +6,10 @@ import numpy as np
 import time
 
 from stage.learners.base import Learner
+from stage.controllers.trivial import RandomController
 from tqdm import trange
 
-class ControlAndLearnModel(Learner):
+class LearnAndControlModel(Learner):
     epochs = 10
     batch_size = 64
     learning_rate = 0.001
@@ -27,7 +28,8 @@ class ControlAndLearnModel(Learner):
             self.controller.reset()
             start = time.time()
             if self.data_train is None:
-                self.data_train, log = self.task.unroll(x, self.controller, random=True)
+                random_controller = RandomController(self.task.nx, self.controller.actor)
+                self.data_train, log = self.task.unroll(x, random_controller, random=True)
                 end = time.time()
                 self.dynamics.learn(self.data_train, self.epochs, batch_size=self.batch_size, verbose=verbose)
             else:

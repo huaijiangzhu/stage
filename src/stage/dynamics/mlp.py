@@ -6,16 +6,24 @@ from torch.utils.data import DataLoader
 import numpy as np
 
 from stage.dynamics.base import Dynamics
-from stage.utils.jacobian_reg import JacobianReg
+from stage.utils.nn import swish
+from stage.utils.jacobian import JacobianNorm, Jacobian
 import tqdm
 
 class MLPDyn(Dynamics):
-    def __init__(self, nq, nv, na, dt, dx, learning_rate=0.005):
+    def __init__(self, nx, nq, nv, na, dt, dx, learning_rate=0.001):
         super().__init__(nx, nq, nv, na, dt)
         self.nin = self.nx + self.na
         self.nout = 2 * self.nx
         self.dx = dx(self.nx, self.na)
         self.opt = optim.Adam(self.dx.parameters(), lr=learning_rate)
+        self.jac = Jacobian()
+
+    def fx(self, f, x):
+        return self.jac(f, x)
+
+    def fa(self, f, a):
+        return self.jac(f, a)
 
     def forward(self, x, a):
         x_dim, a_dim = x.ndimension(), a.ndimension()
@@ -46,7 +54,7 @@ class MLPDyn(Dynamics):
         for n in range(horizon):
             obs_traj.append(obs)
             a = action_traj[n]
-            next_obs, _ = self.sample_predictions(obs, a, n_particles)
+            next_obs = self.sample_predictions(obs, a, n_particles)
             obs = next_obs
         obs_traj = torch.stack(obs_traj, dim=0)
         return obs_traj
@@ -61,12 +69,11 @@ class MLPDyn(Dynamics):
         return prediction
 
     def learn(self, data, epochs, batch_size=32, verbose=False):
-        self.dx.normalize(data[:, :self.nin])
         dataloader = DataLoader(data, batch_size=batch_size, shuffle=True)
         epoch_range = tqdm.trange(epochs, unit="epoch(s)", desc="Network training", disable=not verbose)
-
+        self.dx.train()
         for _ in epoch_range:
-            for i, sample in enumerate(dataloader):
+            for _, sample in enumerate(dataloader):
 
                 xa = sample[:, :self.nin]
                 dx = sample[:, self.nin:]
@@ -81,6 +88,7 @@ class MLPDyn(Dynamics):
             dx = sample[:, self.nin:]
             mse = self.dx.compute_loss(xa, dx, mse=True)
             epoch_range.set_postfix({"Training loss MSE": mse.detach().cpu().numpy()})
+        self.dx.eval()
 
 class Dx(nn.Module):
     def __init__(self, nx, na):
@@ -88,43 +96,66 @@ class Dx(nn.Module):
         self.nx, self.na = nx, na
         self.nin = nx + na
         self.nout = 2 * nx
-        self.inputs_mu = nn.Parameter(torch.zeros(self.nin), requires_grad=False)
-        self.inputs_sigma = nn.Parameter(torch.zeros(self.nin), requires_grad=False)
         self.max_logvar = nn.Parameter(torch.ones(1, self.nx) / 2.0)
         self.min_logvar = nn.Parameter(-torch.ones(1, self.nx) * 10.0)
-        self.jac_reg = JacobianReg()
+        self.jac_norm = JacobianNorm()
         self.lambda_jac_reg = 0.01
-
-    def normalize(self, inputs):
-        mu = inputs.mean(dim=0)
-        sigma = inputs.std(dim=0)
-        sigma[sigma < 1e-12] = 1.0
-
-        self.inputs_mu.data = mu.data
-        self.inputs_sigma.data = sigma.data
 
     def compute_loss(self, xa, dx, mse=False):
         # regularization
-        reg = 0.01 * (self.max_logvar.sum() - self.min_logvar.sum())
-
+        
         xa.requires_grad = True
         dx_pred, logvar_pred = self.forward(xa, return_logvar=True)
-        jac_norm = self.jac_reg(xa, dx_pred)
-        reg += self.lambda_jac_reg * jac_norm
+        jac_norm = self.jac_norm(dx_pred, xa)
+        reg = self.lambda_jac_reg * jac_norm
+        reg += 0.01 * (self.max_logvar.sum() - self.min_logvar.sum())
         
         inv_var_pred = torch.exp(-logvar_pred)
 
         if mse:
             # mse loss
             loss = ((dx_pred - dx) ** 2)
-            loss = torch.mean(loss)
         else:
             # nll loss + regularization
-            loss = ((dx_pred - dx) ** 2) * inv_var_pred + logvar_pred
-            loss = torch.mean(loss)
-            loss += reg
+            loss = ((dx_pred - dx) ** 2) * inv_var_pred + logvar_pred + reg
+
+        loss = torch.mean(loss)
 
         return loss
+
+class DefaultDx(Dx):
+    def __init__(self, nx, na):
+        super().__init__(nx, na)
+        self.fc1 = nn.Linear(self.nin, 300)
+        self.fc2 = nn.Linear(300, 300)
+        self.fc3 = nn.Linear(300, 300)
+        self.fc4 = nn.Linear(300, self.nout)
+        self.bn1 = nn.BatchNorm1d(300)
+        self.bn2 = nn.BatchNorm1d(300)
+        self.bn3 = nn.BatchNorm1d(300)
+        self.dropout = nn.Dropout(0.8)
+    
+    def forward(self, inputs, return_logvar=False):
+
+        inputs = swish(self.bn1(self.fc1(inputs)))
+        inputs = self.dropout(inputs)
+        inputs = swish(self.bn2(self.fc2(inputs)))
+        inputs = swish(self.bn3(self.fc3(inputs)))
+        inputs = self.fc4(inputs)
+
+        mean = inputs[:, :self.nx]
+        logvar = inputs[:, self.nx:]
+        logvar = self.max_logvar - F.softplus(self.max_logvar - logvar)
+        logvar = self.min_logvar + F.softplus(logvar - self.min_logvar)
+
+        if return_logvar:
+            return mean, logvar
+        else:
+            return mean, torch.exp(logvar)
+
+
+
+
 
 
 
