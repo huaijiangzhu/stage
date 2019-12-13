@@ -6,7 +6,8 @@ from torch.utils.data import DataLoader
 import numpy as np
 
 from stage.dynamics.base import Dynamics
-from stage.utils.jacobian_reg import JacobianReg
+from stage.utils.nn import swish, get_affine_params, truncated_normal
+from stage.utils.jacobian import JacobianNorm
 import tqdm
 
 class ProbabilisticEnsemble(Dynamics):
@@ -124,7 +125,7 @@ class Dx(nn.Module):
         self.inputs_sigma = nn.Parameter(torch.zeros(self.nin), requires_grad=False)
         self.max_logvar = nn.Parameter(torch.ones(1, self.nx) / 2.0)
         self.min_logvar = nn.Parameter(-torch.ones(1, self.nx) * 10.0)
-        self.jac_reg = JacobianReg()
+        self.jac_norm = JacobianNorm()
         self.lambda_jac_reg = 0.01
 
     def normalize(self, inputs):
@@ -142,7 +143,7 @@ class Dx(nn.Module):
 
         xa.requires_grad = True
         dx_pred, logvar_pred = self.forward(xa, return_logvar=True)
-        jac_norm = self.jac_reg(xa, dx_pred)
+        jac_norm = self.jac_norm(xa, dx_pred)
         reg += self.lambda_jac_reg * jac_norm
         
         inv_var_pred = torch.exp(-logvar_pred)
@@ -157,6 +158,53 @@ class Dx(nn.Module):
             loss = torch.mean(loss)
             loss += reg            
         return loss
+
+class DefaultDx(Dx):
+    def __init__(self, ensemble_size, nx, na):
+        super().__init__(ensemble_size, nx, na)
+        self.lin0_w, self.lin0_b = get_affine_params(self.ensemble_size, self.nin, 300)
+        self.lin1_w, self.lin1_b = get_affine_params(self.ensemble_size, 300, 300)
+        self.lin2_w, self.lin2_b = get_affine_params(self.ensemble_size, 300, 300)
+        self.lin3_w, self.lin3_b = get_affine_params(self.ensemble_size, 300, 300)
+        self.lin4_w, self.lin4_b = get_affine_params(self.ensemble_size, 300, self.nout)
+        
+    def forward(self, inputs, return_logvar=False):
+
+        inputs = (inputs - self.inputs_mu) / self.inputs_sigma
+
+        inputs = inputs.matmul(self.lin0_w) + self.lin0_b
+        inputs = swish(inputs)
+
+        inputs = inputs.matmul(self.lin1_w) + self.lin1_b
+        inputs = swish(inputs)
+
+        inputs = inputs.matmul(self.lin2_w) + self.lin2_b
+        inputs = swish(inputs)
+
+        inputs = inputs.matmul(self.lin3_w) + self.lin3_b
+        inputs = swish(inputs)
+
+        inputs = inputs.matmul(self.lin4_w) + self.lin4_b
+
+        mean = inputs[:, :, :self.nx]
+        logvar = inputs[:, :, self.nx:]
+        logvar = self.max_logvar - F.softplus(self.max_logvar - logvar)
+        logvar = self.min_logvar + F.softplus(logvar - self.min_logvar)
+
+        if return_logvar:
+            return mean, logvar
+        else:
+            return mean, torch.exp(logvar)
+
+    def compute_decays(self):
+
+        lin0_decays = 0.000075 * (self.lin0_w ** 2).sum() / 2.0
+        lin1_decays = 0.000025 * (self.lin1_w ** 2).sum() / 2.0
+        lin2_decays = 0.000025 * (self.lin2_w ** 2).sum() / 2.0
+        lin3_decays = 0.000025 * (self.lin3_w ** 2).sum() / 2.0
+        lin4_decays = 0.000075 * (self.lin4_w ** 2).sum() / 2.0
+
+        return lin0_decays + lin1_decays + lin2_decays + lin3_decays + lin4_decays
 
 
 

@@ -15,6 +15,12 @@ class Dynamics(nn.Module):
     def forward(self, x, a):
         raise NotImplementedError
 
+    def fx(self, x, a):
+        raise NotImplementedError
+
+    def fa(self, x, u):
+        raise NotImplementedError
+
     def wrap(self, q):
         return torch.atan2(torch.sin(q), torch.cos(q))
 

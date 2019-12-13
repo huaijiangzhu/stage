@@ -13,10 +13,9 @@
 from __future__ import division
 import torch
 import torch.nn as nn
-import torch.autograd as autograd
+from stage.utils.nn import jacobian_vector_product
 
-
-class JacobianReg(nn.Module):
+class JacobianNorm(nn.Module):
     '''
     Loss criterion that computes the trace of the square of the Jacobian.
 
@@ -52,7 +51,7 @@ class JacobianReg(nn.Module):
                 v = self._random_vector(E, B, C)
             if x.is_cuda:
                 v = v.cuda()
-            Jv = self._jacobian_vector_product(y, x, v, create_graph=True)
+            Jv = jacobian_vector_product(y, x, v, create_graph=True)
             J2 += C * torch.norm(Jv)**2 / (num_proj * B * E)
         R = 1/2 * J2
         return R
@@ -70,16 +69,33 @@ class JacobianReg(nn.Module):
         v = torch.addcdiv(arxilirary_zero, 1.0, v, vnorm)
         return v
                                                                             
-    def _jacobian_vector_product(self, y, x, v, create_graph=False): 
-        '''
-        Produce jacobian-vector product dy/dx dot v.
 
-        Note that if you want to differentiate it,
-        you need to make create_graph=True
-        '''                                                            
-        flat_y = y.reshape(-1)
-        flat_v = v.reshape(-1)
-        grad_x, = torch.autograd.grad(flat_y, x, flat_v, 
-                                      retain_graph=True, 
-                                      create_graph=create_graph)
-        return grad_x
+class Jacobian(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x, y):
+
+        nbatch_x, dim_x = x.shape
+        nbatch_y, dim_y = y.shape
+          
+        assert nbatch_x == nbatch_y
+        nbatch = nbatch_x
+
+        
+        J = torch.zeros(nbatch_x, dim_y, dim_x)
+        for i in range(dim_y):
+            # orthonormal vector, sequentially spanned
+            v = torch.zeros(nbatch, dim_y)
+            v[:, i] = 1
+
+            if x.is_cuda:
+                v = v.cuda()
+            Jv = jacobian_vector_product(y, x, v, create_graph=True)
+            J[:, i, :] = Jv
+            
+        return J
+
+                                                                            
+    

@@ -18,18 +18,13 @@ class Task(object):
 
     def reset(self):
         self.env.reset()
-    
-    def learn(self):
-        raise NotImplementedError
 
-    def unroll(self, x, controller=None, params_generator=None, random=False):
+    def unroll(self, obs, controller, params_generator=None, random=False):
 
         # decompose the time-dependent part and state-dependent part of the controller
         # -> params_generator is a function that depends only on time
         # -> controller depends on the state and the params = params_generator(n)
         
-        if controller is None:
-            controller = self.controller
         if params_generator is None:
             params_generator = lambda a : None
 
@@ -38,7 +33,7 @@ class Task(object):
 
         for n in range(self.task_horizon):
             params = params_generator(n)
-            x, reward, done, info = self.act(x, controller, params, random)
+            obs, reward, done, info = self.act(obs, controller, params, random)
             transition = info.transition
             log.append(info)
             data.append(transition)
@@ -47,10 +42,10 @@ class Task(object):
         data = torch.stack(data)
         return data, log
 
-    def act(self, x, controller, params, random):
+    def act(self, obs, controller, params, random):
         control_repetition = int(self.dt_control/self.dt_env)
-        a = controller(x, params, random)
-        x0 = x.clone()
+        a = controller(obs, params, random)
+        x0 = obs[:self.nx].clone()
 
         for i in range(control_repetition):
             u = torch.flatten(controller.actor(x, a))
@@ -63,14 +58,9 @@ class Task(object):
         return x, reward, done, info
 
 
-    def visualize_training_data(self, data_train=None, it_begin=0):
+    def visualize_training_data(self, data_train, it_begin=0):
         ## This only works for episodic tasks
         assert self.env.do_render == True
-
-        if data_train is None:
-            assert self.data_train is not None
-            data_train = self.data_train
-
         self.env.reset()
         n_steps = data_train.shape[0]
         n_rollouts = int(n_steps/self.task_horizon)
@@ -84,7 +74,4 @@ class Task(object):
                 time.sleep(self.dt_control)
         # self.env.close()
 
-    def save_training_data(self, path):
-        assert self.data_train is not None
-        np.save(path, self.data_train.detach().cpu().numpy())
 

@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import torch.autograd as autograd
 
 def use_gpu():
     torch.set_default_tensor_type(torch.cuda.FloatTensor if torch.cuda.is_available() 
                                                          else torch.FloatTensor)
-
 def flip(x, dim):
     xsize = x.size()
     dim = x.dim() + dim if dim < 0 else dim
@@ -13,6 +13,9 @@ def flip(x, dim):
     x = x.view(x.size(0), x.size(1), -1)[:, getattr(torch.arange(x.size(1)-1, 
                       -1, -1), ('cpu','cuda')[x.is_cuda])().long(), :]
     return x.view(xsize)
+
+def flatten_non_batch(x):
+    return x.view(x.shape[0], -1)
 
 def truncated_normal(shape, mean, std):
     tensor = torch.zeros(shape)
@@ -34,3 +37,13 @@ def get_affine_params(ensemble_size, in_features, out_features):
 
 def swish(x):
     return x * torch.sigmoid(x)
+
+def jacobian_vector_product(y, x, v, create_graph=False):
+    # this computes v' * dy/dx
+    flat_y = y.reshape(-1)
+    flat_v = v.reshape(-1)
+    vJ, = torch.autograd.grad(flat_y, x, flat_v, 
+                              retain_graph=True, 
+                              create_graph=create_graph)
+    return vJ
+
