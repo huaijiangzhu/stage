@@ -12,11 +12,11 @@ from dotmap import DotMap
 
 class BaseEnv(gym.Env):
 
-    def __init__(self, dt, step_cost, do_render=False):
+    def __init__(self, dt, cost, do_render=False):
         self.viewer = None
         self.do_render = do_render
         self.dt = dt
-        self.step_cost = step_cost
+        self.cost = cost
         if self.do_render:
             cid = p.connect(p.GUI)
         else:

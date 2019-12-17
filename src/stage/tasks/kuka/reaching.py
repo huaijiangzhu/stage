@@ -11,7 +11,7 @@ from tqdm import trange
 from dotmap import DotMap
 
 from stage.tasks.base import Task
-from stage.costs.step_cost import StepCost
+from stage.costs.cost import Cost
 from stage.controllers.trivial import Identity, OpenLoop
 
 class KukaReaching(Task):
@@ -26,8 +26,8 @@ class KukaReaching(Task):
                  dt_env=0.001, 
                  render=False):
 
-        self.step_cost = KukaStepCost()
-        super().__init__(dt_env, dt_control, self.step_cost, render)
+        self.cost = KukaCost()
+        super().__init__(dt_env, dt_control, self.cost, render)
         self.update_goal(self.goal, noise=False)
 
         self.q_ub = torch.Tensor(self.env.q_ub)
@@ -40,7 +40,7 @@ class KukaReaching(Task):
         q_desired = p.calculateInverseKinematics(self.env.robot_id,
                                                  6,
                                                  goal)        
-        self.step_cost.desired = torch.Tensor(q_desired)
+        self.cost.desired = torch.Tensor(q_desired)
 
     def act(self, x, controller, params, random):
         control_repetition = int(self.dt_control/self.dt_env)
@@ -82,23 +82,31 @@ class KukaReaching(Task):
         x = torch.Tensor(obs[:self.nx])
         return x
 
-class KukaStepCost(StepCost):
+class KukaCost(Cost):
     def __init__(self):
         super().__init__()
         self.desired = torch.zeros(7)
+        self.lambda_a = 1e-6
 
-    def obs_cost(self, obs):
-        if obs.ndimension() == 1:
-            obs = obs.unsqueeze(0)
-        q = obs[:, :7]
-        v = obs[:, 7:14]
+    def forward(self, x, a):
+        cost = DotMap()
+        cost.obs = self.obs_cost(x)
+        cost.act = self.action_cost(a)
+        cost.total = cost.obs + cost.act
+        return cost
+
+    def obs_cost(self, x):
+        if x.ndimension() == 1:
+            x = x.unsqueeze(0)
+        q = x[:, :7]
+        v = x[:, 7:14]
         diff_q = q - self.desired[:7]
         return torch.sum(diff_q**2, dim=1) 
 
-    def action_cost(self, action):
-        if action.ndimension() == 1:
-            action = action.unsqueeze(0)
-        return 1e-6 * (action ** 2).sum(dim=1)
+    def action_cost(self, a):
+        if a.ndimension() == 1:
+            a = a.unsqueeze(0)
+        return self.lambda_a * (a ** 2).sum(dim=1)
 
 
 

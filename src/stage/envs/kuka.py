@@ -16,8 +16,8 @@ class KukaEnv(BaseEnv):
     metadata = {'render.modes': ['human', 'rgb_array'], 'video.frames_per_second': 50}
     nq, nv, nu, nx = 7, 7, 7, 14
 
-    def __init__(self, dt, step_cost=None, do_render=False):
-        super().__init__(dt, step_cost, do_render)
+    def __init__(self, dt, cost=None, do_render=False):
+        super().__init__(dt, cost, do_render)
         dir_path = os.path.dirname(os.path.realpath(__file__))
         self.robot_urdf = os.path.join(dir_path, 'urdf/kuka/iiwa14.urdf')
         self.action_space = gym.spaces.Box(-10, 10,(self.nu,))
@@ -39,13 +39,13 @@ class KukaEnv(BaseEnv):
         q, v = self.get_state()
         q = self.wrap(q)
         obs = np.concatenate((q, v))
-        if self.step_cost is None:
+        if self.cost is None:
             obs_reward = 0
             act_reward = 0
         else:
-            obs_cost, act_cost = self.step_cost(torch.Tensor(obs), torch.Tensor(tau))
-            obs_reward = -obs_cost.detach().cpu().numpy()
-            act_reward = -act_cost.detach().cpu().numpy()
+            cost = self.cost(torch.Tensor(obs), torch.Tensor(tau))
+            obs_reward = -cost.obs.detach().cpu().numpy()
+            act_reward = -cost.act.detach().cpu().numpy()
 
         reward = obs_reward + act_reward
         info = DotMap()

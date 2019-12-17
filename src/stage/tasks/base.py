@@ -10,11 +10,11 @@ import stage.envs
 from tqdm import trange
 
 class Task(object):
-    def __init__(self, dt_env, dt_control, step_cost, render):
+    def __init__(self, dt_env, dt_control, cost, render):
         self.data_train = None
         self.dt_env = dt_env
         self.dt_control = dt_control
-        self.env = gym.make(self.env_name, dt=dt_env, step_cost=step_cost, do_render=render)
+        self.env = gym.make(self.env_name, dt=dt_env, cost=cost, do_render=render)
 
     def reset(self):
         self.env.reset()

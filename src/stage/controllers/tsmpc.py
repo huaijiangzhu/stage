@@ -12,7 +12,7 @@ from stage.utils.nn import truncated_normal
 
 class TSMPC(nn.Module):
 
-    def __init__(self, dynamics, step_cost, actor,
+    def __init__(self, dynamics, cost, actor,
                  plan_horizon, n_particles, pop_size):
         super().__init__()
         self.nq, self.nv = dynamics.nq, dynamics.nv
@@ -29,7 +29,7 @@ class TSMPC(nn.Module):
                              lower_bound=self.action_lb.repeat(self.plan_horizon))
 
         self.cost = TSMPCCost(self.plan_horizon, self.n_particles, self.pop_size,
-                              self.dynamics, self.actor, step_cost)
+                              self.dynamics, self.actor, cost)
         self.prev_sol = ((self.action_lb + self.action_ub)/2).repeat(self.plan_horizon)
         self.init_var = ((self.action_ub - self.action_lb) **2 / 16).repeat(self.plan_horizon)
 
@@ -57,11 +57,7 @@ class TSMPC(nn.Module):
         self.cost.horizon = self.plan_horizon
 
         if random:
-            mean = (self.action_lb + self.action_ub)/2
-            var =  ((self.action_ub - self.action_lb)**2)/16
-            lb_dist, ub_dist = mean - self.action_lb, self.action_ub - mean
-            constrained_var = torch.min(torch.min((lb_dist / 2)**2, (ub_dist / 2)**2), var)
-            a = truncated_normal(mean.shape, mean, torch.sqrt(constrained_var))
+            a = self.actor.sample()
 
         else:
             sol, _, _ = self.optimizer(self.cost, self.prev_sol, self.init_var)

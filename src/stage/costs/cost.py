@@ -8,18 +8,26 @@ from stage.controllers.base import Controller
 from stage.optimizers.cem import CEM
 from stage.utils.nn import truncated_normal
 
-class StepCost(nn.Module):
+class Cost(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, obs, action):
-        return self.obs_cost(obs), self.action_cost(action)
-
-    def obs_cost(self, obs):
+    def forward(self, x, u, t, terminal):
         raise NotImplementedError
 
-    def action_cost(self, action):
+    def lx(self, l, x, t):
         raise NotImplementedError
 
+    def lxx(self, lx, x, t):
+        raise NotImplementedError
+
+    def lu(self, l, u, t):
+        raise NotImplementedError
+
+    def lux(self, lu, x, t):
+        raise NotImplementedError
+
+    def luu(self, lu, u, t):
+        raise NotImplementedError
 
 

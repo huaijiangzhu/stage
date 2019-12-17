@@ -47,3 +47,10 @@ def jacobian_vector_product(y, x, v, create_graph=False):
                               create_graph=create_graph)
     return vJ
 
+def bmv(X, y):
+    return X.bmm(y.unsqueeze(2)).squeeze(2)
+
+def bquad(x, Q):
+    return x.unsqueeze(1).bmm(Q).bmm(x.unsqueeze(2)).squeeze(1).squeeze(1)
+
+

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from stage.utils.nn import truncated_normal
 
 class Actor(nn.Module):
 
@@ -15,5 +16,26 @@ class Actor(nn.Module):
     def forward(self, x, a):
         return self.decoder(x, a)
 
-    ## TODO: normalize/sampling etc...
+    def sample(self, mean=None, var=None, horizon=1):
+
+        lb = self.action_lb
+        ub = self.action_ub
+
+        if mean is None:
+            mean = (lb + ub)/2
+        if var is None:
+            var = (ub - lb) **2 / 16
+
+        lb = lb.repeat(horizon)
+        ub = ub.repeat(horizon)
+        mean = mean.repeat(horizon)
+        var = var.repeat(horizon)
+
+        lb_dist, ub_dist = mean - lb, ub - mean
+        constrained_var = torch.min(torch.min((lb_dist / 2)**2, (ub_dist / 2)**2), var)
+        action_sequence = truncated_normal(mean.shape, mean, torch.sqrt(constrained_var))
+
+        return action_sequence
+
+    ## TODO: normalize etc...
         

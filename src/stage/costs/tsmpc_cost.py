@@ -4,7 +4,7 @@ from stage.controllers.base import Controller
 
 class TSMPCCost(nn.Module):
     def __init__(self, horizon, n_particles, pop_size,
-                 dynamics, actor, step_cost):
+                 dynamics, actor, cost):
         super().__init__()
         self.dynamics = dynamics
         self.actor = actor
@@ -14,7 +14,7 @@ class TSMPCCost(nn.Module):
         self.horizon = horizon
         self.n_particles = n_particles
         self.pop_size = pop_size
-        self.step_cost = step_cost
+        self.cost = cost
 
         # number of samples for Lipschitz regularization
         self.ns = 0
@@ -50,10 +50,10 @@ class TSMPCCost(nn.Module):
                 for s in range(ns):
                     reg += L[b*s:b*(s+1)]
                 reg = reg/ns
-                cost = self.obs_cost(next_obs[:b]) + self.action_cost(u) + 0.1 * reg
+                cost = self.cost(next_obs[:b], u).l + 0.1 * reg
             else:
-                cost = self.obs_cost(next_obs[:b]) + self.action_cost(u)
-            
+                cost = self.cost(next_obs[:b], u).l
+
             cost = cost.view(-1, self.n_particles)
             costs[:, n] = cost.mean(dim=1)
             obs = next_obs[:b]
@@ -82,11 +82,6 @@ class TSMPCCost(nn.Module):
         # obs : (pop_size * n_particles, nx)
         return obs
 
-    def obs_cost(self, obs):
-        return self.step_cost.obs_cost(obs)
-
-    def action_cost(self, action):
-        return self.step_cost.action_cost(action)
 
 
 

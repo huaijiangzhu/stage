@@ -4,11 +4,13 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
 import numpy as np
+from dotmap import DotMap
+import tqdm
 
 from stage.dynamics.base import Dynamics
 from stage.utils.nn import swish
 from stage.utils.jacobian import JacobianNorm, Jacobian
-import tqdm
+
 
 class MLPDyn(Dynamics):
     def __init__(self, nx, nq, nv, na, dt, dx, learning_rate=0.001):
@@ -26,11 +28,6 @@ class MLPDyn(Dynamics):
         return self.jac(f, a)
 
     def forward(self, x, a):
-        x_dim, a_dim = x.ndimension(), a.ndimension()
-        if x_dim == 1:
-            x = x.unsqueeze(0)
-        if a_dim == 1:
-            a = a.unsqueeze(0)
         xa = torch.cat((x, a), dim=-1)
         dx_pred, var_pred = self.dx(xa)
         return x + dx_pred, var_pred
@@ -54,19 +51,37 @@ class MLPDyn(Dynamics):
         for n in range(horizon):
             obs_traj.append(obs)
             a = action_traj[n]
-            next_obs = self.sample_predictions(obs, a, n_particles)
-            obs = next_obs
+            prediction = self.sample_predictions(obs, a, n_particles, diff=False)
+            obs = prediction.x
         obs_traj = torch.stack(obs_traj, dim=0)
         return obs_traj
 
-    def sample_predictions(self, obs, a, n_particles):
+    def sample_predictions(self, x, a, n_particles, diff):
 
         # n_particles <= 0 --> no sampling
-        mean, var = self.forward(obs, a)
+
+        prediction = DotMap()
+        
+        x_dim, a_dim = x.ndimension(), a.ndimension()
+        if x_dim == 1:
+            x = x.unsqueeze(0)
+        if a_dim == 1:
+            a = a.unsqueeze(0)
+
+        if diff:
+            x.requires_grad = True
+            a.requires_grad = True
+
+        mean, var = self.forward(x, a)
+        
         if n_particles > 0:
-            prediction = mean + torch.randn_like(mean) * var.sqrt()
+            prediction.x = mean + torch.randn_like(mean) * var.sqrt()
         else:
-            prediction = mean
+            prediction.x = mean
+        if diff:
+            prediction.fx = self.jac(prediction.x, x)
+            prediction.fa = self.jac(prediction.x, a)
+
         return prediction
 
     def learn(self, data, epochs, batch_size=32, verbose=False):
