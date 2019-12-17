@@ -1,4 +1,6 @@
 dotmap
+torch 
+torchvision
 numpy
 scipy
 jupyter
@@ -6,5 +8,5 @@ cython
 matplotlib
 pandas
 pybullet
-quadprog
+gym
 tqdm
