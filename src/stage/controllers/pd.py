@@ -9,7 +9,6 @@ class PD(Controller):
         super().__init__(nq, nv, nu)
         self.nx = nq + nv  
 
-    @torch.no_grad()
     def forward(self, x, params):
         x_dim = x.ndimension()
         params_dim = params.ndimension()
@@ -36,7 +35,6 @@ class PDFull(Controller):
         super().__init__(nq, nv, nu)
         self.nx = nq + nv  
     
-    @torch.no_grad()
     def forward(self, x, params):
         x_dim = x.ndimension()
         params_dim = params.ndimension()

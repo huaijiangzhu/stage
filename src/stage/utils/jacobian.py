@@ -127,7 +127,7 @@ class JacobianNorm(nn.Module):
         return v
                                                                             
 
-class Jacobian(nn.Module):
+class AutoDiff(nn.Module):
 
     def __init__(self):
         super().__init__()
@@ -149,9 +149,16 @@ class Jacobian(nn.Module):
             if x.is_cuda:
                 v = v.cuda()
             vJ = jacobian_vector_product(y, x, v, create_graph=True)
+            if vJ is None:
+                # dy/dx = 0
+                break
             J[:, i, :] = vJ
             
         return J
+
+class FiniteDiff(nn.Module):
+
+    pass
 
                                                                             
     

@@ -12,7 +12,7 @@ class Cost(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x, u, t, terminal):
+    def forward(self, x, a, t, terminal):
         raise NotImplementedError
 
     def lx(self, l, x, t):
@@ -21,13 +21,13 @@ class Cost(nn.Module):
     def lxx(self, lx, x, t):
         raise NotImplementedError
 
-    def lu(self, l, u, t):
+    def la(self, l, a, t):
         raise NotImplementedError
 
-    def lux(self, lu, x, t):
+    def lax(self, la, x, t):
         raise NotImplementedError
 
-    def luu(self, lu, u, t):
+    def laa(self, la, a, t):
         raise NotImplementedError
 
 

@@ -11,7 +11,6 @@ class Identity(Controller):
         super().__init__(nq, nv, nu)
         self.nx = nq + nv  
     
-    @torch.no_grad()
     def forward(self, x, params, random=False):
         return torch.Tensor(params)
 

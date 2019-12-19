@@ -24,7 +24,7 @@ class Actor(nn.Module):
         if mean is None:
             mean = (lb + ub)/2
         if var is None:
-            var = (ub - lb) **2 / 16
+            var = (ub - lb) ** 2 / 16
 
         lb = lb.repeat(horizon)
         ub = ub.repeat(horizon)

@@ -14,7 +14,8 @@ from stage.tasks.base import Task
 from stage.costs.cost import Cost
 from stage.controllers.trivial import Identity, OpenLoop
 
-from stage.utils.nn import bquad
+from stage.utils.nn import bquad, flatten_non_batch
+from stage.utils.jacobian import AutoDiff
 
 class TwoLinkReaching(Task):
     env_name = "TwoLink-v0"
@@ -23,12 +24,12 @@ class TwoLinkReaching(Task):
     goal = np.array([-0.5*np.pi, 0, 0, 0])
     
 
-    def __init__(self,
+    def __init__(self, 
                  dt_control=0.01,
                  dt_env=0.001, 
                  render=False):
 
-        self.cost = TwoLinkCost()
+        self.cost = DefaultCost()
         super().__init__(dt_env, dt_control, self.cost, render)
         self.update_goal(self.goal, noise=False)
 
@@ -67,7 +68,7 @@ class TwoLinkReaching(Task):
         return x
 
 
-class TwoLinkCost(Cost):
+class DefaultCost(Cost):
     def __init__(self):
         super().__init__()
         self.nx = 4
@@ -75,46 +76,27 @@ class TwoLinkCost(Cost):
         self.desired = torch.zeros(self.nx)
         self.Q = torch.diag(torch.Tensor([1,1,0,0])).unsqueeze(0)
         self.R = 1e-5 * torch.eye(self.nu).unsqueeze(0)
+        self.d = AutoDiff()
 
-    def forward(self, x, u, t=0, terminal=False, diff=False):
-        cost = DotMap()
-        
+    def forward(self, x, u, t=0, terminal=False):
+
         if x.ndimension() == 1:
             x = x.unsqueeze(0)
         if u.ndimension() == 1:
-            u = u.unsqueeze(0)
+            u = u.unsqueeze(0) 
+
+        cost = DotMap()
 
         cost.obs = self.obs_cost(x)
-
         if not terminal:
             cost.act = self.action_cost(u)
         else:
             cost.act = 0
 
-        cost.l = cost.obs + cost.act
-
-        if diff:
-            cost.lx = self.lx(cost.l, x, t)
-            cost.lxx = self.lxx(cost.lx, x, t)
-
-            if not terminal:
-                cost.lu = self.lu(cost.l, u, t)
-                cost.lux = self.lux(cost.lu, x, t)
-                cost.luu = self.luu(cost.lu, u, t)
+        l = cost.obs + cost.act
+        cost.l = l
 
         return cost
-
-    def lx(self, l, x, t):
-        pass
-    def lxx(self, lx, x, t):
-        pass
-    def lu(self, l, u, t):
-        pass
-    def luu(self, lu, u, t):
-        pass
-    def lux(self, lu, x, t):
-        pass
-
 
     def obs_cost(self, x, t=0, terminal=False):
         
@@ -122,12 +104,54 @@ class TwoLinkCost(Cost):
         diffx = x - self.desired
         Q = self.Q.expand(x.shape[0], *self.Q.shape[1:])
 
-        return bquad(diffx, Q)
+        return bquad(Q, diffx)
 
     def action_cost(self, u, t=0, terminal=False):
 
         R = self.R.expand(u.shape[0], *self.R.shape[1:])
-        return bquad(u, R)
+        return bquad(R, u)
+
+    ### for DDP
+
+    def l(self, x, a, t=0, terminal=False, diff=False):
+
+        if diff:
+            x.requires_grad = True
+            a.requires_grad = True
+
+        if x.ndimension() == 1:
+            x = x.unsqueeze(0)
+        if a.ndimension() == 1:
+            a = a.unsqueeze(0) 
+
+        u = self.actor(x, a)
+        cost = self.forward(x, u, t, terminal)
+
+        if diff:
+            cost.lx = flatten_non_batch(self.lx(cost.l, x, a, t))
+            cost.lxx = self.lxx(cost.lx, x, a, t)
+
+            if not terminal:
+                cost.la = flatten_non_batch(self.la(cost.l, x, a, t))
+                cost.lax = self.lax(cost.la, x, a, t)
+                cost.laa = self.laa(cost.la, x, a, t)
+
+        return cost
+
+    def lx(self, l, x, a, t):
+        return self.d(l, x)
+
+    def lxx(self, lx, x, a, t):
+        return self.d(lx, x)
+
+    def la(self, l, x, a, t):
+        return self.d(l, a)
+
+    def laa(self, la, x, a, t):
+        return self.d(la, a)
+
+    def lax(self, la, x, a, t):
+        return self.d(la, x)
 
 
 

@@ -9,7 +9,7 @@ import tqdm
 
 from stage.dynamics.base import Dynamics
 from stage.utils.nn import swish
-from stage.utils.jacobian import JacobianNorm, Jacobian
+from stage.utils.jacobian import JacobianNorm, AutoDiff
 
 
 class MLPDyn(Dynamics):
@@ -19,13 +19,13 @@ class MLPDyn(Dynamics):
         self.nout = 2 * self.nx
         self.dx = dx(self.nx, self.na)
         self.opt = optim.Adam(self.dx.parameters(), lr=learning_rate)
-        self.jac = Jacobian()
+        self.d = AutoDiff()
 
     def fx(self, f, x):
-        return self.jac(f, x)
+        return self.d(f, x)
 
     def fa(self, f, a):
-        return self.jac(f, a)
+        return self.d(f, a)
 
     def forward(self, x, a):
         xa = torch.cat((x, a), dim=-1)
@@ -73,14 +73,14 @@ class MLPDyn(Dynamics):
             a.requires_grad = True
 
         mean, var = self.forward(x, a)
-        
+
         if n_particles > 0:
             prediction.x = mean + torch.randn_like(mean) * var.sqrt()
         else:
             prediction.x = mean
         if diff:
-            prediction.fx = self.jac(prediction.x, x)
-            prediction.fa = self.jac(prediction.x, a)
+            prediction.fx = self.d(prediction.x, x)
+            prediction.fa = self.d(prediction.x, a)
 
         return prediction
 

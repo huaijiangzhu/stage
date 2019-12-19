@@ -43,14 +43,16 @@ def jacobian_vector_product(y, x, v, create_graph=False):
     flat_y = y.reshape(-1)
     flat_v = v.reshape(-1)
     vJ, = torch.autograd.grad(flat_y, x, flat_v, 
-                              retain_graph=True, 
+                              retain_graph=True,
+                              allow_unused=True,
                               create_graph=create_graph)
+ 
     return vJ
 
-def bmv(X, y):
-    return X.bmm(y.unsqueeze(2)).squeeze(2)
+def bmv(A, x):
+    return A.bmm(x.unsqueeze(2)).squeeze(2)
 
-def bquad(x, Q):
-    return x.unsqueeze(1).bmm(Q).bmm(x.unsqueeze(2)).squeeze(1).squeeze(1)
+def bquad(Q, x):
+    return x.unsqueeze(1).bmm(Q).bmm(x.unsqueeze(2)).squeeze(1)
 
 
