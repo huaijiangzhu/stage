@@ -17,6 +17,9 @@ def flip(x, dim):
 def flatten_non_batch(x):
     return x.view(x.shape[0], -1)
 
+def renew(x):
+    return x.clone().detach()
+
 def truncated_normal(shape, mean, std):
     tensor = torch.zeros(shape)
     tmp = tensor.new_empty(shape + (4,)).normal_()
@@ -51,6 +54,9 @@ def jacobian_vector_product(y, x, v, create_graph=False):
 
 def bmv(A, x):
     return A.bmm(x.unsqueeze(2)).squeeze(2)
+
+def bdot(x, y):
+    return torch.bmm(x.unsqueeze(1), y.unsqueeze(2)).squeeze(1)
 
 def bquad(Q, x):
     return x.unsqueeze(1).bmm(Q).bmm(x.unsqueeze(2)).squeeze(1)
