@@ -2,11 +2,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import warnings
 from tqdm import trange
 from dotmap import DotMap
 
 from stage.controllers.base import Controller
 from stage.utils.nn import renew
+
+class SVDError(Exception):
+    pass
 
 class ILQR(nn.Module):
 
@@ -29,7 +33,7 @@ class ILQR(nn.Module):
         self.delta = self.delta0
         self.eps = 1e-8
 
-    def optimize(self, x, actions=None, horizon=None, max_it=10):
+    def optimize(self, x, actions=None, horizon=None, max_it=10, on_iteration=None):
         self.mu = 1.0
         self.delta = self.delta0
         exponent = -torch.arange(10)**2 * torch.log(1.1 * torch.ones(10))
@@ -40,18 +44,41 @@ class ILQR(nn.Module):
         for it in range(max_it):
             accepted = False
             if changed:
-                rollout = self.forward_pass(x, actions, horizon)
-                J_opt = self.compute_cost(rollout)
+                rollout = self.unroll(x, actions, horizon)
                 changed = False
             try:
                 sols = self.backward_pass(rollout)
                 for alpha in alphas:
-                    rollout_new = self.line_search(rollout, sols, alpha)
+                    accepted = self.line_search(rollout, sols, alpha)
+            except SVDError as e:
+                # Qaa was not positive-definite and this diverged.
+                # Try again with a higher regularization term.
+                warnings.warn(str(e))
 
-    def line_search(self, rollout, sols):
+            if not accepted:
+                # Increase regularization term.
+                self.delta = max(1.0, self.delta) * self._delta0
+                self.mu = max(self.mu_min, self.mu * self.delta)
+                if self.mu_max and self.mu >= self.mu_max:
+                    warnings.warn("exceeded max regularization term")
+                    break
+
+            if on_iteration:
+                on_iteration(it, sols, J_opt, accepted, converged)
+
+            if converged:
+                break
+
+        return sols
+
+                
+    def line_search(self, rollout, sols, alpha):
+        J_opt = self.compute_cost(rollout)
+
+    def forward_pass(self, sols, alpha=1.0):
         pass
 
-    def forward_pass(self, x, actions=None, horizon=None):
+    def unroll(self, x, actions=None, horizon=None):
 
         rollout = []
 
@@ -92,6 +119,8 @@ class ILQR(nn.Module):
 
         return rollout
 
+
+    @torch.no_grad()
     def backward_pass(self, rollout):
 
         sols = []
@@ -102,14 +131,18 @@ class ILQR(nn.Module):
         for i in range(self.horizon - 1, -1, -1):
             Qx, Qa, Qxx, Qax, Qaa = self.q(rollout[i], Vx, Vxx)
 
-            U, S, V = torch.svd(Qaa)
+            try:
+                U, S, V = torch.svd(Qaa.cpu()) ## torch.svd on GPU is slow/unstable
+            except RuntimeError:
+                raise SVDError
+
             if torch.min(S) < self.eps:
 
                 eps = 1e-8
                 S[S < eps] = eps
 
             if torch.isnan(Qaa).any():
-                return None
+                raise Exception # TODO make the error more specific
 
             Qaa_inv = V.mm(torch.diag(1. / S)).mm(U.T)
             Qaa = U.mm(torch.diag(S)).mm(V.T)
