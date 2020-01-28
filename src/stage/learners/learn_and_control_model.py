@@ -25,14 +25,16 @@ class LearnAndControlModel(Learner):
         for i in range(iteration):
         
             x = self.task.reset()
-            self.controller.reset()
+            self.controller.restart()
             start = time.time()
+            
             if self.data_train is None:
                 random_controller = RandomController(self.task.nx, self.controller.actor)
                 self.data_train, log = self.task.unroll(x, random_controller, random=True)
                 end = time.time()
                 self.dynamics.learn(self.data_train, self.epochs, batch_size=self.batch_size, verbose=verbose)
             else:
+                self.controller.update(x)
                 new_data, log = self.task.unroll(x, self.controller, random=False)
                 end = time.time()
                 self.data_train = torch.cat((self.data_train, new_data), dim=0)

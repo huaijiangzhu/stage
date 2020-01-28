@@ -33,18 +33,18 @@ class RandomController(Controller):
         return a
 
 class OpenLoop(Controller):
-    def __init__(self, nx, actor, action_sequence):
+    def __init__(self, nx, actor, actions):
         super().__init__(actor.nq, actor.nv, actor.nu)
         self.nx = nx
         self.na = actor.na
         ## TODO some dim. check here
-        self.action_sequence = torch.Tensor(action_sequence)
+        self.actions = torch.Tensor(actions)
         self.actor = actor
     
     @torch.no_grad()
     def forward(self, x, params, random=False):
         t = params
-        a = self.action_sequence[t, :]
+        a = self.actions[t, :]
         return a
 
     

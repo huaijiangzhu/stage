@@ -26,7 +26,23 @@ class ILQR(nn.Module):
         self.cost = cost
         self.cost.actor = actor
         self.horizon = horizon
+        self.rollout = None
+        self.sols = None
+        self.planning_horizon = 20
+        self.restart()
 
+    def forward(self, x, params, random=False):
+        rollout, sols = self.optimize(x, actions_init=self.prev_actions, horizon=self.planning_horizon)
+        actions = torch.stack([info.a for info in self.rollout])
+        a = actions[0]
+        random_action = self.actor.sample()
+        random_action = random_action.unsqueeze(0)
+        print (random_action.shape)
+        print (actions[1:].shape)
+        self.prev_actions = torch.stack([actions[1:], random_action])
+        return renew(a)
+
+    def restart(self):
         self.mu = 1.0
         self.mu_min = 1e-6
         self.mu_max = 1e10
@@ -34,9 +50,20 @@ class ILQR(nn.Module):
         self.delta = self.delta0
         self.eps = 1e-8
 
-    def optimize(self, x, actions_init=None, horizon=None, max_it=10, on_iteration=None):
-        self.mu = 1.0
-        self.delta = self.delta0
+        self.rollout = None
+        self.sols = None
+        self.prev_actions = torch.stack([self.actor.sample() for t in range(self.planning_horizon)])
+    
+    def update(self, x):
+        pass
+        # if self.rollout is not None:
+        #     actions = torch.stack([info.a for info in self.rollout])
+        #     self.optimize(x, actions)
+        # else:
+        #     self.optimize(x)
+
+
+    def optimize(self, x, actions_init=None, horizon=None, max_it=10, on_iteration=None, tol=1e-6):
         exponent = -torch.arange(10)**2 * torch.log(1.1 * torch.ones(10))
         alphas = torch.exp(exponent)
 
@@ -54,13 +81,13 @@ class ILQR(nn.Module):
             accepted = False
             if changed:          
                 rollout = self.unroll(x, actions, horizon)
-                print (len(rollout))
                 J_opt = self.compute_cost(rollout)
                 changed = False
             try:
                 sols = self.backward_pass(rollout)
                 # line search
                 for alpha in alphas:
+
                     rollout_new = self.control(rollout, sols, alpha)
                     J_new = self.compute_cost(rollout_new)
 
@@ -74,10 +101,10 @@ class ILQR(nn.Module):
                         changed = True
 
                         # Decrease regularization term.
-                        self._delta = min(1.0, self._delta) / self._delta_0
-                        self._mu *= self._delta
-                        if self._mu <= self._mu_min:
-                            self._mu = 0.0
+                        self.delta = min(1.0, self.delta) / self.delta0
+                        self.mu *= self.delta
+                        if self.mu <= self.mu_min:
+                            self.mu = 0.0
 
                         # Accept this.
                         accepted = True
@@ -90,7 +117,7 @@ class ILQR(nn.Module):
 
             if not accepted:
                 # Increase regularization term.
-                self.delta = max(1.0, self.delta) * self._delta0
+                self.delta = max(1.0, self.delta) * self.delta0
                 self.mu = max(self.mu_min, self.mu * self.delta)
                 if self.mu_max and self.mu >= self.mu_max:
                     warnings.warn("exceeded max regularization term")
@@ -102,8 +129,15 @@ class ILQR(nn.Module):
             if converged:
                 break
 
-        return sols
+        self.rollout = rollout
+        self.sols = sols
 
+        actions = torch.stack([info.a for info in self.rollout])
+        self.openloop = OpenLoop(self.nx, self.actor, actions)
+
+        return rollout, sols
+
+    @torch.no_grad()
     def control(self, rollout, sols, alpha):
         rollout_new = []
         horizon = len(rollout)
@@ -125,9 +159,9 @@ class ILQR(nn.Module):
                           a=a,
                           l=cost.l[0])
             x = prediction.x[0]
-            rollout.append(info)
+            rollout_new.append(info)
 
-        return rollout
+        return rollout_new
 
 
     def unroll(self, x, actions, horizon):
@@ -174,7 +208,8 @@ class ILQR(nn.Module):
         Vx = rollout[-1].lx
         Vxx = rollout[-1].lxx
 
-        for i in range(self.horizon - 1, -1, -1):
+        horizon = len(rollout)
+        for i in range(horizon - 1, -1, -1):
             Qx, Qa, Qxx, Qax, Qaa = self.q(rollout[i], Vx, Vxx)
 
             try:
@@ -221,6 +256,7 @@ class ILQR(nn.Module):
 
         return sols
 
+    @torch.no_grad()
     def q(self, info, Vx, Vxx):
 
         fx, fa = info.fx, info.fa
@@ -239,6 +275,7 @@ class ILQR(nn.Module):
 
         return Qx, Qa, Qxx, Qax, Qaa
 
+    @torch.no_grad()
     def compute_cost(self, rollout):
         J = 0
         for info in rollout:
@@ -249,8 +286,6 @@ class ILQR(nn.Module):
     def regularize(self, ns):
         pass
 
-    def reset(self):
-        pass
 
 
 

@@ -26,7 +26,7 @@ class Task(object):
         # -> controller depends on the state and the params = params_generator(n)
         
         if params_generator is None:
-            params_generator = lambda a : None
+            params_generator = lambda t : t
 
         data = []
         log = []

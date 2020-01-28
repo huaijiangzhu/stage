@@ -69,7 +69,7 @@ class TSMPC(nn.Module):
     def regularize(self, ns):
         self.cost.ns = ns
 
-    def reset(self):
+    def restart(self):
         self.optimizer.reset(sol_dim=self.plan_horizon * self.na,
                              upper_bound=self.action_ub.repeat(self.plan_horizon),
                              lower_bound=self.action_lb.repeat(self.plan_horizon))
