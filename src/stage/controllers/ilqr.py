@@ -7,6 +7,7 @@ from tqdm import trange
 from dotmap import DotMap
 
 from stage.controllers.base import Controller
+from stage.controllers.trivial import Identity, OpenLoop
 from stage.utils.nn import renew
 
 class SVDError(Exception):
@@ -33,7 +34,7 @@ class ILQR(nn.Module):
         self.delta = self.delta0
         self.eps = 1e-8
 
-    def optimize(self, x, actions=None, horizon=None, max_it=10, on_iteration=None):
+    def optimize(self, x, actions_init=None, horizon=None, max_it=10, on_iteration=None):
         self.mu = 1.0
         self.delta = self.delta0
         exponent = -torch.arange(10)**2 * torch.log(1.1 * torch.ones(10))
@@ -41,19 +42,51 @@ class ILQR(nn.Module):
 
         changed = True
         converged = False
+        actions = actions_init
+
+        if horizon is None:
+            horizon = self.horizon
+
+        if actions is None:
+            actions = [self.actor.sample() for t in range(horizon)]
+
         for it in range(max_it):
             accepted = False
-            if changed:
+            if changed:          
                 rollout = self.unroll(x, actions, horizon)
+                print (len(rollout))
+                J_opt = self.compute_cost(rollout)
                 changed = False
             try:
                 sols = self.backward_pass(rollout)
+                # line search
                 for alpha in alphas:
-                    accepted = self.line_search(rollout, sols, alpha)
+                    rollout_new = self.control(rollout, sols, alpha)
+                    J_new = self.compute_cost(rollout_new)
+
+                    if J_new < J_opt:
+                        if torch.abs((J_opt - J_new) / J_opt) < tol:
+                            converged = True
+
+                        J_opt = J_new
+                        rollout = rollout_new
+                        actions = [info.a for info in rollout]
+                        changed = True
+
+                        # Decrease regularization term.
+                        self._delta = min(1.0, self._delta) / self._delta_0
+                        self._mu *= self._delta
+                        if self._mu <= self._mu_min:
+                            self._mu = 0.0
+
+                        # Accept this.
+                        accepted = True
+                        break
+
             except SVDError as e:
                 # Qaa was not positive-definite and this diverged.
                 # Try again with a higher regularization term.
-                warnings.warn(str(e))
+                warnings.warn("ill-conditioned Qaa")
 
             if not accepted:
                 # Increase regularization term.
@@ -71,25 +104,38 @@ class ILQR(nn.Module):
 
         return sols
 
-                
-    def line_search(self, rollout, sols, alpha):
-        J_opt = self.compute_cost(rollout)
+    def control(self, rollout, sols, alpha):
+        rollout_new = []
+        horizon = len(rollout)
+        x = rollout[0].x
 
-    def forward_pass(self, sols, alpha=1.0):
-        pass
+        for t in range(horizon):
+            if t == horizon - 1:
+                terminal = True
+            else:
+                terminal = False
+            x_ = rollout[t].x
+            a_ = rollout[t].a
+            k = sols[t].k
+            K = sols[t].K
+            a = a_ + alpha * k + K.mv(x - x_)
+            cost = self.cost.l(renew(x), renew(a), t, terminal, diff=False)
+            prediction = self.dynamics.sample_predictions(renew(x), renew(a), n_particles=0, diff=False)
+            info = DotMap(x=x,
+                          a=a,
+                          l=cost.l[0])
+            x = prediction.x[0]
+            rollout.append(info)
 
-    def unroll(self, x, actions=None, horizon=None):
+        return rollout
+
+
+    def unroll(self, x, actions, horizon):
 
         rollout = []
 
         if not isinstance(x, torch.Tensor):
             x = torch.Tensor(x)
-
-        if horizon is None:
-            horizon = self.horizon
-
-        if actions is None:
-            actions = self.actor.sample(horizon)
 
         for t in range(horizon):
 
@@ -99,12 +145,12 @@ class ILQR(nn.Module):
                 terminal = False
 
             a = actions[t]
-
             cost = self.cost.l(renew(x), renew(a), t, terminal, diff=True)
             prediction = self.dynamics.sample_predictions(renew(x), renew(a), n_particles=0, diff=True)
 
             # for now squeeze batch axis
-            info = DotMap(x=x[0], 
+            info = DotMap(x=x,
+                          a=a, 
                           fx=prediction.fx[0],
                           fa=prediction.fa[0],
                           l=cost.l[0],
@@ -114,7 +160,7 @@ class ILQR(nn.Module):
                           laa=cost.laa[0],
                           lax=cost.lax[0])
 
-            x = prediction.x
+            x = prediction.x[0]
             rollout.append(info)
 
         return rollout
@@ -135,6 +181,10 @@ class ILQR(nn.Module):
                 U, S, V = torch.svd(Qaa.cpu()) ## torch.svd on GPU is slow/unstable
             except RuntimeError:
                 raise SVDError
+
+            U = U.cuda()
+            S = S.cuda()
+            V = V.cuda()
 
             if torch.min(S) < self.eps:
 
@@ -192,7 +242,7 @@ class ILQR(nn.Module):
     def compute_cost(self, rollout):
         J = 0
         for info in rollout:
-            J += rollout.l
+            J += info.l
         return J
 
 
