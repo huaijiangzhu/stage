@@ -32,14 +32,18 @@ class ILQR(nn.Module):
         self.restart()
 
     def forward(self, x, params, random=False):
-        rollout, sols = self.optimize(x, actions_init=self.prev_actions, horizon=self.planning_horizon)
+        if params > 0:
+            max_it = 1
+        else:
+            max_it = 10
+        rollout = self.optimize(x, actions_init=self.prev_actions, 
+                                horizon=self.planning_horizon,
+                                max_it=max_it)
         actions = torch.stack([info.a for info in self.rollout])
         a = actions[0]
         random_action = self.actor.sample()
         random_action = random_action.unsqueeze(0)
-        print (random_action.shape)
-        print (actions[1:].shape)
-        self.prev_actions = torch.stack([actions[1:], random_action])
+        self.prev_actions = torch.cat((actions[1:], random_action), dim=0)
         return renew(a)
 
     def restart(self):
@@ -97,7 +101,6 @@ class ILQR(nn.Module):
 
                         J_opt = J_new
                         rollout = rollout_new
-                        actions = [info.a for info in rollout]
                         changed = True
 
                         # Decrease regularization term.
@@ -130,12 +133,11 @@ class ILQR(nn.Module):
                 break
 
         self.rollout = rollout
-        self.sols = sols
 
         actions = torch.stack([info.a for info in self.rollout])
         self.openloop = OpenLoop(self.nx, self.actor, actions)
 
-        return rollout, sols
+        return rollout
 
     @torch.no_grad()
     def control(self, rollout, sols, alpha):
