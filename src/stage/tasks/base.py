@@ -52,7 +52,8 @@ class Task(object):
             obs, reward, done, info = self.env.step(u)
             x = torch.Tensor(obs[:self.nx])
 
-        dx = x - x0
+        # TODO: Define task-specific state difference function
+        dx = x - x0 
         transition = torch.cat((x0, a, dx), dim=0)
         info.transition = transition
         return x, reward, done, info

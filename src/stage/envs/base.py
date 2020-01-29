@@ -57,14 +57,13 @@ class BaseEnv(gym.Env):
 
     def reset(self, init_state=None):
         p.setTimeStep(self.dt)
-        p.setGravity(0, 0, 0)
 
         ## TODO take care of floating base system
 
         self.nj = p.getNumJoints(self.robot_id)
         self.bullet_joint_ids = np.arange(self.nj)
         self.initialize_robot(init_state)
-
+        p.setGravity(0, 0, 0)
         return self.get_state()
 
     def close(self):

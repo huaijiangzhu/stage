@@ -29,7 +29,7 @@ class ILQR(nn.Module):
         self.rollout = None
         self.sols = None
         self.planning_horizon = 20
-        self.restart()
+        self.reset()
 
     def forward(self, x, params, random=False):
         if params > 0:
@@ -46,7 +46,7 @@ class ILQR(nn.Module):
         self.prev_actions = torch.cat((actions[1:], random_action), dim=0)
         return renew(a)
 
-    def restart(self):
+    def reset(self):
         self.mu = 1.0
         self.mu_min = 1e-6
         self.mu_max = 1e10
@@ -229,7 +229,7 @@ class ILQR(nn.Module):
                 S[S < eps] = eps
 
             if torch.isnan(Qaa).any():
-                raise Exception # TODO make the error more specific
+                raise SVDError
 
             Qaa_inv = V.mm(torch.diag(1. / S)).mm(U.T)
             Qaa = U.mm(torch.diag(S)).mm(V.T)

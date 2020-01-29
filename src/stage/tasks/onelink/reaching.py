@@ -17,11 +17,11 @@ from stage.controllers.trivial import Identity, OpenLoop
 from stage.utils.nn import bquad, flatten_non_batch
 from stage.utils.jacobian import AutoDiff
 
-class TwoLinkReaching(Task):
-    env_name = "TwoLink-v0"
+class OneLinkReaching(Task):
+    env_name = "OneLink-v0"
     task_horizon = 100
-    nq, nv, nu, nx = 2, 2, 2, 4
-    goal = np.array([0, 0, 0, 0])
+    nq, nv, nu, nx = 1, 1, 1, 2
+    goal = np.array([0., 0.])
     
 
     def __init__(self, 
@@ -33,8 +33,8 @@ class TwoLinkReaching(Task):
         super().__init__(dt_env, dt_control, self.cost, render)
         self.update_goal(self.goal, noise=False)
 
-        self.q_ub = torch.Tensor([3.2, 3.2])
-        self.q_lb = torch.Tensor([-3.2, -3.2])
+        self.q_ub = torch.Tensor([3.2,])
+        self.q_lb = torch.Tensor([-3.2,])
 
     def update_goal(self, goal, noise=False):
         if noise:
@@ -63,7 +63,7 @@ class TwoLinkReaching(Task):
         if goal is None:
             goal = self.goal
         self.update_goal(goal, noise)
-        q = np.array([0.5*np.pi, 0])
+        q = np.array([0.5*np.pi])
         v = np.zeros(self.nv)
         obs, _, _, _ = self.env.reset((q, v))
         x = torch.Tensor(obs[:self.nx])
@@ -73,10 +73,10 @@ class TwoLinkReaching(Task):
 class DefaultCost(Cost):
     def __init__(self):
         super().__init__()
-        self.nx = 4
-        self.nu = 2
+        self.nx = 2
+        self.nu = 1
         self.desired = torch.zeros(self.nx)
-        self.Q = torch.diag(torch.Tensor([1,1,0,0])).unsqueeze(0)
+        self.Q = torch.diag(torch.Tensor([1,0])).unsqueeze(0)
         self.R = 1e-5 * torch.eye(self.nu).unsqueeze(0)
         self.d = AutoDiff()
 

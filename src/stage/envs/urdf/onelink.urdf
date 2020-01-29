@@ -1,5 +1,5 @@
 <?xml version="0.0" ?>
-<robot name="TwoJointRobot">
+<robot name="OneJointRobot">
   <material name="blue">
     <color rgba="0 0 0.8 1"/>
   </material>
@@ -53,36 +53,6 @@
     <inertial>
       <mass value="0.5"/>
       <origin rpy="0 0 0" xyz="0.5 0 0"/>
-      <inertia ixx="0.00208333333333" ixy="0.0125" ixz="0.00625" iyy="0.167083333333" iyz="0.000625" izz="0.168333333333"/>
-    </inertial>
-  </link>
-
-  <joint name="joint_2" type="revolute">
-    <axis xyz="0 1 0"/>
-    <limit effort="10000" velocity="100"/>
-    <dynamics damping="0" friction="0"/>
-    <origin rpy="0 0 0" xyz="1.05 0. 0.0"/>
-    <parent link="link_1"/>
-    <child link="link_2"/>
-  </joint>
-
-  <link name="link_2">
-    <visual>
-      <geometry>
-        <box size="1.0 0.1 0.1"/>
-      </geometry>
-      <origin rpy="0 0 0" xyz="0.5 0 0"/>
-      <material name="white"/>
-    </visual>
-    <collision>
-      <geometry>
-        <box size="1.0 0.1 0.1"/>
-      </geometry>
-      <origin rpy="0 0 0" xyz="0.5 0 0"/>
-    </collision>
-    <inertial>
-      <origin rpy="0 0 0" xyz="0.5 0 0"/>
-      <mass value="0.5"/>
       <inertia ixx="0.00208333333333" ixy="0.0125" ixz="0.00625" iyy="0.167083333333" iyz="0.000625" izz="0.168333333333"/>
     </inertial>
   </link>

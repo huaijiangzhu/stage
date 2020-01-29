@@ -50,7 +50,7 @@ class TSMPCCost(nn.Module):
                 for s in range(ns):
                     reg += L[b*s:b*(s+1)]
                 reg = reg/ns
-                cost = self.cost(next_obs[:b], u).l + 0.1 * reg
+                cost = self.cost(next_obs[:b], u).l + 0.1 * reg.view(-1, 1)
             else:
                 cost = self.cost(next_obs[:b], u).l
 
