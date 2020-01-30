@@ -15,7 +15,7 @@ class SVDError(Exception):
 
 class ILQR(nn.Module):
 
-    def __init__(self, dynamics, cost, actor, horizon,
+    def __init__(self, dynamics, cost, actor, plan_horizon,
                  alpha=1.0, decay=0.05):
         super().__init__()
         self.dynamics = dynamics
@@ -25,19 +25,19 @@ class ILQR(nn.Module):
         self.action_ub, self.action_lb = actor.action_ub, actor.action_lb
         self.cost = cost
         self.cost.actor = actor
-        self.horizon = horizon
+        self.plan_horizon = plan_horizon
         self.rollout = None
         self.sols = None
-        self.planning_horizon = 20
         self.reset()
 
     def forward(self, x, params, random=False):
-        if params > 0:
+        t = params
+        if t > 0:
             max_it = 1
         else:
-            max_it = 10
+            max_it = 30
         rollout = self.optimize(x, actions_init=self.prev_actions, 
-                                horizon=self.planning_horizon,
+                                horizon=self.plan_horizon,
                                 max_it=max_it)
         actions = torch.stack([info.a for info in self.rollout])
         a = actions[0]
@@ -56,7 +56,7 @@ class ILQR(nn.Module):
 
         self.rollout = None
         self.sols = None
-        self.prev_actions = torch.stack([self.actor.sample() for t in range(self.planning_horizon)])
+        self.prev_actions = torch.stack([self.actor.sample() for t in range(self.plan_horizon)])
     
     def update(self, x):
         pass
@@ -76,7 +76,7 @@ class ILQR(nn.Module):
         actions = actions_init
 
         if horizon is None:
-            horizon = self.horizon
+            horizon = self.plan_horizon
 
         if actions is None:
             actions = [self.actor.sample() for t in range(horizon)]
@@ -89,6 +89,7 @@ class ILQR(nn.Module):
                 changed = False
             try:
                 sols = self.backward_pass(rollout)
+
                 # line search
                 for alpha in alphas:
 
@@ -126,9 +127,6 @@ class ILQR(nn.Module):
                     warnings.warn("exceeded max regularization term")
                     break
 
-            if on_iteration:
-                on_iteration(it, sols, J_opt, accepted, converged)
-
             if converged:
                 break
 
@@ -138,6 +136,10 @@ class ILQR(nn.Module):
         self.openloop = OpenLoop(self.nx, self.actor, actions)
 
         return rollout
+
+    @torch.no_grad()
+    def clamp_action(self, a):
+        return torch.max(self.actor.action_lb, torch.min(a, self.actor.action_ub))
 
     @torch.no_grad()
     def control(self, rollout, sols, alpha):
@@ -155,6 +157,10 @@ class ILQR(nn.Module):
             k = sols[t].k
             K = sols[t].K
             a = a_ + alpha * k + K.mv(x - x_)
+
+            # still need to do this because boxqp only constrains a_ + k
+            a = self.clamp_action(a)
+
             cost = self.cost.l(renew(x), renew(a), t, terminal, diff=False)
             prediction = self.dynamics.sample_predictions(renew(x), renew(a), n_particles=0, diff=False)
             info = DotMap(x=x,
@@ -162,6 +168,7 @@ class ILQR(nn.Module):
                           l=cost.l[0])
             x = prediction.x[0]
             rollout_new.append(info)
+
 
         return rollout_new
 
@@ -242,7 +249,14 @@ class ILQR(nn.Module):
 
             Vxx = Qxx + K.T.mm(Qaa).mm(K)
             Vxx += K.T.mm(Qax) + Qax.T.mm(K)
-            Vxx = 0.5 * (Vxx + Vxx.T) 
+            Vxx = 0.5 * (Vxx + Vxx.T)
+
+            a = rollout[i].a
+            b_lower = self.actor.action_lb - a
+            b_upper = self.actor.action_ub - a
+            k, clamped_idx = self.box_qp(a, Qaa, Qa, b_lower, b_upper)
+            for c_idx in clamped_idx:
+                K[c_idx, :] = torch.zeros_like(K[c_idx, :])
 
             sol = DotMap(k=k,
                          K=K,
@@ -255,6 +269,8 @@ class ILQR(nn.Module):
                          Qaa=Qaa)
 
             sols.append(sol)
+
+        sols.reverse()
 
         return sols
 
@@ -287,6 +303,72 @@ class ILQR(nn.Module):
 
     def regularize(self, ns):
         pass
+
+    @torch.no_grad()
+    def box_qp(self, x, H, q, b_lower, b_upper, tol=1e-3):
+        """
+        Projected-Newton QP Solver. Used to find the optimal control for the
+        backwards pass of iLQR when taking bounds for the controls into account.
+
+        Implementation based on Appendix I from the paper:
+            Control-Limited Differential Dynamic Programming
+            Yuval Tassa, Nicolas Mansard, Emo Todorov
+            https://homes.cs.washington.edu/~todorov/papers/TassaICRA14.pdf
+
+        Assuming the goal is to find k to minimize 1/2 k'Hk + q'k , such that -b_lower <= k <= b_upper.
+        """
+        fx = lambda x: 0.5 * x.dot(H.mv(x)) + q.dot(x)
+        clamp = lambda v: torch.max(b_lower, torch.min(v, b_upper))
+
+        x = clamp(x.clone())
+
+        while True:
+            # Gradient.
+            g = q + H.mv(x)
+
+            # Clamped and free indices.
+            c_idx = (x.eq(b_lower) & (g > 0)) | (x.eq(b_upper) & (g < 0))
+            f_idx = ~c_idx
+
+            dF = torch.sum(f_idx)
+
+            # Sort by the free and clamped indices.
+            H_fc = torch.cat((H[f_idx, :], H[c_idx, :]), dim=0)
+            Hff, Hfc = H_fc[:dF, :dF], H_fc[:dF, dF:]
+
+            xf, xc = x[f_idx], x[c_idx]
+            qf = q[f_idx]
+
+            # Compute the free-gradient and exit optimization if small enough.
+            # Otherwise compute the step-direction of the optimization.
+            gf = qf + Hff.mv(xf) + Hfc.mv(xc)
+
+            if torch.norm(gf, p=2) < tol:
+                return x, torch.where(c_idx)
+
+            step_x = torch.zeros(x.shape[0])
+            step_x[f_idx] = -Hff.inverse().mv(gf)
+
+            ###
+            # Doing backtracking line-search to find optimal alpha value.
+            alpha = 1.0  # Step-size
+            beta = 0.95  # Step-size reduction on each iteration
+            gamma = 0.1
+
+            f_x = fx(x)
+
+            while True:
+                x_alpha = clamp(x + alpha * step_x)
+
+                if f_x > gamma * g.dot(x - x_alpha) + fx(x_alpha):
+                    break
+
+                alpha *= beta
+
+                if torch.norm(alpha * step_x, p=2) < tol:
+                    return x_alpha, torch.where(c_idx)
+
+            x = x_alpha
 
 
 

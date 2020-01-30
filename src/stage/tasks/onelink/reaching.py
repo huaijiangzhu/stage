@@ -76,7 +76,7 @@ class DefaultCost(Cost):
         self.nx = 2
         self.nu = 1
         self.desired = torch.zeros(self.nx)
-        self.Q = torch.diag(torch.Tensor([1,0])).unsqueeze(0)
+        self.Q = torch.diag(torch.Tensor([1, 1e-2])).unsqueeze(0)
         self.R = 1e-5 * torch.eye(self.nu).unsqueeze(0)
         self.d = AutoDiff()
 
