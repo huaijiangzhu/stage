@@ -35,7 +35,7 @@ class ILQR(nn.Module):
         if t > 0:
             max_it = 1
         else:
-            max_it = 30
+            max_it = 50
         rollout = self.optimize(x, actions_init=self.prev_actions, 
                                 horizon=self.plan_horizon,
                                 max_it=max_it)
@@ -162,7 +162,7 @@ class ILQR(nn.Module):
             a = self.clamp_action(a)
 
             cost = self.cost.l(renew(x), renew(a), t, terminal, diff=False)
-            prediction = self.dynamics.sample_predictions(renew(x), renew(a), n_particles=0, diff=False)
+            prediction = self.dynamics.sample_predictions(x, a, n_particles=0, diff=False)
             info = DotMap(x=x,
                           a=a,
                           l=cost.l[0])
@@ -182,29 +182,43 @@ class ILQR(nn.Module):
 
         for t in range(horizon):
 
-            if t == horizon - 1:
-                terminal = True
-            else:
-                terminal = False
-
             a = actions[t]
-            cost = self.cost.l(renew(x), renew(a), t, terminal, diff=True)
-            prediction = self.dynamics.sample_predictions(renew(x), renew(a), n_particles=0, diff=True)
+            prediction = self.dynamics.sample_predictions(x, a, n_particles=0, diff=False)
+            # handle terminal cost
+            if t == horizon - 1:
+                cost = self.cost.l(renew(x), renew(a), t, terminal=True, diff=True)
+                info = DotMap(x=x,
+                              a=a, 
+                              fx=prediction.fx[0],
+                              fa=prediction.fa[0],
+                              l=cost.l[0],
+                              lx=cost.lx[0],
+                              lxx=cost.lxx[0],
+                              la=cost.la[0],
+                              laa=cost.laa[0],
+                              lax=cost.lax[0])
 
-            # for now squeeze batch axis
-            info = DotMap(x=x,
-                          a=a, 
-                          fx=prediction.fx[0],
-                          fa=prediction.fa[0],
-                          l=cost.l[0],
-                          lx=cost.lx[0],
-                          lxx=cost.lxx[0],
-                          la=cost.la[0],
-                          laa=cost.laa[0],
-                          lax=cost.lax[0])
-
+            else:
+                info = DotMap(x=x, a=a)
             x = prediction.x[0]
             rollout.append(info)
+
+        X = torch.stack([info.x for info in rollout])
+        A = torch.stack([info.a for info in rollout])
+
+        prediction = self.dynamics.sample_predictions(X, A, n_particles=0, diff=True)
+        cost = self.cost.l(renew(X), renew(A), t, terminal=False, diff=True)
+
+        for i in range(horizon):
+            rollout[i].fx = prediction.fx[i]
+            rollout[i].fa = prediction.fa[i]
+            if i < horizon - 1:
+                rollout[i].l=cost.l[i]
+                rollout[i].lx=cost.lx[i]
+                rollout[i].lxx=cost.lxx[i]
+                rollout[i].la=cost.la[i]
+                rollout[i].laa=cost.laa[i]
+                rollout[i].lax=cost.lax[i]
 
         return rollout
 

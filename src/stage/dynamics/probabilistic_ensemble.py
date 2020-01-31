@@ -3,11 +3,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from dotmap import DotMap
 import numpy as np
 
 from stage.dynamics.base import Dynamics
 from stage.utils.nn import swish, get_affine_params, truncated_normal
-from stage.utils.jacobian import JacobianNormEnsemble
+from stage.utils.jacobian import JacobianNormEnsemble, AutoDiffEnsemble
+from stage.utils.nn import renew
 import tqdm
 
 class ProbabilisticEnsemble(Dynamics):
@@ -21,6 +23,13 @@ class ProbabilisticEnsemble(Dynamics):
         self.dx = dx(ensemble_size, self.nx, self.na)
         self.opt = optim.Adam(self.dx.parameters(), lr=learning_rate)
         self.ensemble_size = ensemble_size
+        self.d = AutoDiffEnsemble()
+
+    def fx(self, f, x):
+        return self.d(f, x)
+
+    def fa(self, f, a):
+        return self.d(f, a)
 
     def forward(self, x, a):
         x_dim, a_dim = x.ndimension(), a.ndimension()
@@ -34,7 +43,7 @@ class ProbabilisticEnsemble(Dynamics):
 
     def unroll(self, obs, action_traj, n_particles=20):
         # TODO: support unroll with different initial conditions/multiple action sequences
-        assert n_particles % self.ensemble_size == 0
+        
         horizon, na = action_traj.shape
         obs = obs.reshape((1, -1))
         action_traj = action_traj.view(1, horizon, na)
@@ -54,23 +63,50 @@ class ProbabilisticEnsemble(Dynamics):
         for n in range(horizon):
             obs_traj.append(obs)
             a = action_traj[n]
-            next_obs = self.sample_predictions(obs, a, n_particles)
-            obs = next_obs
+            prediction = self.sample_predictions(obs, a, n_particles, diff=True)
+            obs = prediction.x
         obs_traj = torch.stack(obs_traj, dim=0)
         return obs_traj
 
-    def sample_predictions(self, obs, a, n_particles):
-        obs = self.group_as_ensemble(obs, n_particles)
-        mean, var = self.forward(obs, self.group_as_ensemble(a, n_particles))
-        samples = mean + torch.randn_like(mean) * var.sqrt()
-        samples = self.flatten_ensemble(samples, n_particles)
-        mean = self.flatten_ensemble(mean, n_particles)
+    def sample_predictions(self, x, a, n_particles, diff=False):
+
+        # n_particles = 0 --> no sampling
+        if n_particles > 0:
+            assert n_particles % self.ensemble_size == 0
+        x, a = renew(x), renew(a)
+        x_dim, a_dim = x.ndimension(), a.ndimension()
+        if x_dim == 1:
+            x = x.unsqueeze(0)
+        if a_dim == 1:
+            a = a.unsqueeze(0)
 
         if n_particles > 0:
-            prediction = samples
+            x = self.group_as_ensemble(x, n_particles)
+            a = self.group_as_ensemble(a, n_particles)
         else:
-            prediction = mean
+            x = torch.stack(self.ensemble_size * [x])
+            a = torch.stack(self.ensemble_size * [a])
+        if diff:
+            x.requires_grad = True
+            a.requires_grad = True
+        mean, var = self.forward(x, a)
+        if n_particles > 0:
+            x_ = mean + torch.randn_like(mean) * var.sqrt()
+        else:
+            x_ = mean
+
+        prediction = DotMap()
+        if diff:
+            prediction.fx = self.d(x_, x)
+            prediction.fa = self.d(x_, a)
+
+        if n_particles > 0:
+            prediction.x = self.flatten_ensemble(x_, n_particles)
+        else:
+            prediction.x = torch.mean(x_, dim=0)
+        
         return prediction
+
 
     def group_as_ensemble(self, arr, n_particles):
         dim = arr.shape[-1]

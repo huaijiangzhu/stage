@@ -156,6 +156,35 @@ class AutoDiff(nn.Module):
             
         return J
 
+class AutoDiffEnsemble(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, y, x):
+
+        nensemble, nbatch_x, nx = x.shape
+        nensemble, nbatch_y, ny = y.shape
+          
+        assert nbatch_x == nbatch_y
+        nbatch = nbatch_x
+        
+        J = torch.zeros(nbatch, ny, nx)
+        for i in range(ny):
+            # orthonormal vector, sequentially spanned
+            v = torch.zeros(nensemble, nbatch, ny)
+            v[:, :, i] = 1
+            if x.is_cuda:
+                v = v.cuda()
+            vJ = jacobian_vector_product(y, x, v, create_graph=True)
+            if vJ is None:
+                # dy/dx = 0
+                break
+            vJ = torch.mean(vJ, dim=0) # average over the ensemble
+            J[:, i, :] = vJ
+            
+        return J
+
 class FiniteDiff(nn.Module):
 
     pass

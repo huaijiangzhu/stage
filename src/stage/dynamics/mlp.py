@@ -10,6 +10,7 @@ import tqdm
 from stage.dynamics.base import Dynamics
 from stage.utils.nn import swish
 from stage.utils.jacobian import JacobianNorm, AutoDiff
+from stage.utils.nn import renew
 
 
 class MLPDyn(Dynamics):
@@ -59,28 +60,26 @@ class MLPDyn(Dynamics):
     def sample_predictions(self, x, a, n_particles, diff):
 
         # n_particles <= 0 --> no sampling
-
-        prediction = DotMap()
-        
+        x, a = renew(x), renew(a)        
         x_dim, a_dim = x.ndimension(), a.ndimension()
         if x_dim == 1:
             x = x.unsqueeze(0)
         if a_dim == 1:
             a = a.unsqueeze(0)
-
         if diff:
             x.requires_grad = True
             a.requires_grad = True
-
         mean, var = self.forward(x, a)
-
         if n_particles > 0:
-            prediction.x = mean + torch.randn_like(mean) * var.sqrt()
+            x_ = mean + torch.randn_like(mean) * var.sqrt()
         else:
-            prediction.x = mean
+            x_ = mean
+
+        prediction = DotMap()
         if diff:
-            prediction.fx = self.d(prediction.x, x)
-            prediction.fa = self.d(prediction.x, a)
+            prediction.fx = self.d(x_, x)
+            prediction.fa = self.d(x_, a)
+        prediction.x = x_
 
         return prediction
 

@@ -16,6 +16,7 @@ from stage.controllers.trivial import Identity, OpenLoop
 
 from stage.utils.nn import bquad, flatten_non_batch
 from stage.utils.jacobian import AutoDiff
+from stage.utils.nn import renew
 
 class OneLinkReaching(Task):
     env_name = "OneLink-v0"
@@ -116,6 +117,7 @@ class DefaultCost(Cost):
     ### for DDP
 
     def l(self, x, a, t=0, terminal=False, diff=False):
+        x, a = renew(x), renew(a)
 
         if diff:
             x.requires_grad = True
