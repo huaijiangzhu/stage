@@ -28,23 +28,30 @@ class ILQR(nn.Module):
         self.plan_horizon = plan_horizon
         self.rollout = None
         self.sols = None
+        self.warm_starter = None
         self.reset()
 
     def forward(self, x, params, random=False):
         t = params
-        if t > 0:
+        if t == 0:
             max_it = 1
         else:
-            max_it = 50
-        rollout = self.optimize(x, actions_init=self.prev_actions, 
-                                horizon=self.plan_horizon,
-                                max_it=max_it)
-        actions = torch.stack([info.a for info in self.rollout])
+            max_it = 1
+
+        # TODO: standardize the warm start API
+        warm_start = self.warm_starter.openloop(x, self.cached_actions.view(-1), self.plan_horizon)
+        self.cached_actions = warm_start.view(self.plan_horizon, self.na)
+        actions = self.openloop(x, actions_init=self.cached_actions, horizon=self.plan_horizon, max_it=max_it)
         a = actions[0]
         random_action = self.actor.sample()
         random_action = random_action.unsqueeze(0)
-        self.prev_actions = torch.cat((actions[1:], random_action), dim=0)
-        return renew(a)
+        self.cached_actions = torch.cat((actions[1:], random_action), dim=0)
+        return a
+
+    def openloop(self, x, actions_init, horizon, max_it=1):
+        rollout = self.optimize(x, actions_init, horizon, max_it)
+        actions = torch.stack([info.a for info in self.rollout]).detach()
+        return actions
 
     def reset(self):
         self.mu = 1.0
@@ -56,18 +63,10 @@ class ILQR(nn.Module):
 
         self.rollout = None
         self.sols = None
-        self.prev_actions = torch.stack([self.actor.sample() for t in range(self.plan_horizon)])
-    
-    def update(self, x):
-        pass
-        # if self.rollout is not None:
-        #     actions = torch.stack([info.a for info in self.rollout])
-        #     self.optimize(x, actions)
-        # else:
-        #     self.optimize(x)
+        self.cached_actions = torch.stack([self.actor.sample() for t in range(self.plan_horizon)])
 
 
-    def optimize(self, x, actions_init=None, horizon=None, max_it=10, on_iteration=None, tol=1e-6):
+    def optimize(self, x, actions_init=None, horizon=None, max_it=1, tol=1e-6):
         exponent = -torch.arange(10)**2 * torch.log(1.1 * torch.ones(10))
         alphas = torch.exp(exponent)
 
@@ -161,7 +160,7 @@ class ILQR(nn.Module):
             # still need to do this because boxqp only constrains a_ + k
             a = self.clamp_action(a)
 
-            cost = self.cost.l(renew(x), renew(a), t, terminal, diff=False)
+            cost = self.cost.l(x, a, t, terminal, diff=False)
             prediction = self.dynamics.sample_predictions(x, a, n_particles=0, diff=False)
             info = DotMap(x=x,
                           a=a,
@@ -180,34 +179,35 @@ class ILQR(nn.Module):
         if not isinstance(x, torch.Tensor):
             x = torch.Tensor(x)
 
-        for t in range(horizon):
+        with torch.no_grad(): 
+            for t in range(horizon - 1):
 
-            a = actions[t]
-            prediction = self.dynamics.sample_predictions(x, a, n_particles=0, diff=False)
-            # handle terminal cost
-            if t == horizon - 1:
-                cost = self.cost.l(renew(x), renew(a), t, terminal=True, diff=True)
-                info = DotMap(x=x,
-                              a=a, 
-                              fx=prediction.fx[0],
-                              fa=prediction.fa[0],
-                              l=cost.l[0],
-                              lx=cost.lx[0],
-                              lxx=cost.lxx[0],
-                              la=cost.la[0],
-                              laa=cost.laa[0],
-                              lax=cost.lax[0])
-
-            else:
+                a = actions[t]
+                prediction = self.dynamics.sample_predictions(x, a, n_particles=0, diff=False)
                 info = DotMap(x=x, a=a)
-            x = prediction.x[0]
-            rollout.append(info)
+                x = prediction.x[0]
+                rollout.append(info)
 
+        # handle terminal cost
+        a = actions[horizon - 1]
+        prediction = self.dynamics.sample_predictions(x, a, n_particles=0, diff=False)
+        cost = self.cost.l(x, a, t, terminal=True, diff=True)
+        info = DotMap(x=x,
+                      a=a,
+                      l=cost.l[0],
+                      lx=cost.lx[0],
+                      lxx=cost.lxx[0],
+                      la=cost.la[0],
+                      laa=cost.laa[0],
+                      lax=cost.lax[0])
+        rollout.append(info)
+
+        # compute derivatives in parallel 
         X = torch.stack([info.x for info in rollout])
         A = torch.stack([info.a for info in rollout])
 
         prediction = self.dynamics.sample_predictions(X, A, n_particles=0, diff=True)
-        cost = self.cost.l(renew(X), renew(A), t, terminal=False, diff=True)
+        cost = self.cost.l(X, A, t, terminal=False, diff=True)
 
         for i in range(horizon):
             rollout[i].fx = prediction.fx[i]
@@ -235,8 +235,9 @@ class ILQR(nn.Module):
         for i in range(horizon - 1, -1, -1):
             Qx, Qa, Qxx, Qax, Qaa = self.q(rollout[i], Vx, Vxx)
 
+            # torch.svd and torch.inverse on GPU is slow/unstable
             try:
-                U, S, V = torch.svd(Qaa.cpu()) ## torch.svd on GPU is slow/unstable
+                U, S, V = torch.svd(Qaa.cpu()) 
             except RuntimeError:
                 raise SVDError
 
@@ -290,6 +291,7 @@ class ILQR(nn.Module):
 
     @torch.no_grad()
     def q(self, info, Vx, Vxx):
+        Vx, Vxx = Vx.cuda(), Vxx.cuda()
 
         fx, fa = info.fx, info.fa
         lx, lxx = info.lx, info.lxx
@@ -331,10 +333,11 @@ class ILQR(nn.Module):
 
         Assuming the goal is to find k to minimize 1/2 k'Hk + q'k , such that -b_lower <= k <= b_upper.
         """
+
         fx = lambda x: 0.5 * x.dot(H.mv(x)) + q.dot(x)
         clamp = lambda v: torch.max(b_lower, torch.min(v, b_upper))
 
-        x = clamp(x.clone())
+        x = clamp(x)
 
         while True:
             # Gradient.
@@ -357,11 +360,14 @@ class ILQR(nn.Module):
             # Otherwise compute the step-direction of the optimization.
             gf = qf + Hff.mv(xf) + Hfc.mv(xc)
 
+
             if torch.norm(gf, p=2) < tol:
                 return x, torch.where(c_idx)
 
             step_x = torch.zeros(x.shape[0])
-            step_x[f_idx] = -Hff.inverse().mv(gf)
+            Hff_inv = Hff.cpu().inverse().cuda()
+            step_x[f_idx] = -Hff_inv.mv(gf)
+
 
             ###
             # Doing backtracking line-search to find optimal alpha value.

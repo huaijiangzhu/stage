@@ -73,7 +73,7 @@ class ProbabilisticEnsemble(Dynamics):
         # n_particles = 0 --> no sampling
         if n_particles > 0:
             assert n_particles % self.ensemble_size == 0
-        x, a = renew(x), renew(a)
+        
         x_dim, a_dim = x.ndimension(), a.ndimension()
         if x_dim == 1:
             x = x.unsqueeze(0)
@@ -87,6 +87,7 @@ class ProbabilisticEnsemble(Dynamics):
             x = torch.stack(self.ensemble_size * [x])
             a = torch.stack(self.ensemble_size * [a])
         if diff:
+            x, a = renew(x), renew(a)
             x.requires_grad = True
             a.requires_grad = True
         mean, var = self.forward(x, a)

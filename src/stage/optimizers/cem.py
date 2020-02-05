@@ -8,29 +8,28 @@ import pdb
 
 class CEM(Optimizer):
 
-    def __init__(self, na, horizon,
+    def __init__(self, nsol,
                  upper_bound=None, lower_bound=None, 
-                 pop_size=400, num_elites=40, max_iters=5,
+                 pop_size=400, num_elites=40, max_it=5,
                  epsilon=0.001, alpha=0.1):
         super().__init__()
-        self.na, self.horizon = na, horizon
-        self.pop_size, self.max_iters = pop_size, max_iters
+        self.pop_size, self.max_it = pop_size, max_it
         self.num_elites = int(self.pop_size/10)
         self.epsilon, self.alpha = epsilon, alpha
-        self.reset(na * horizon, upper_bound, lower_bound)
+        self.reset(nsol, upper_bound, lower_bound)
 
-    def reset(self, sol_dim, upper_bound, lower_bound):
-        self.sol_dim = sol_dim
-        self.ub, self.lb = upper_bound, lower_bound
+    def reset(self, nsol, ub, lb):
+        self.nsol = nsol
+        self.ub, self.lb = ub, lb
 
-    def forward(self, cost_function, init_mean, init_var):
+    def forward(self, cost_function, mean_init, var_init):
 
-        mean, var, i = init_mean, init_var, 0
-        while (i < self.max_iters) and torch.max(var) > self.epsilon:
+        mean, var, i = mean_init, var_init, 0
+        while (i < self.max_it) and torch.max(var) > self.epsilon:
             
             lb_dist, ub_dist = mean - self.lb, self.ub - mean
             constrained_var = torch.min(torch.min((lb_dist / 2)**2, (ub_dist / 2)**2), var)
-            samples = truncated_normal((self.pop_size, self.sol_dim), mean, torch.sqrt(constrained_var))
+            samples = truncated_normal((self.pop_size, self.nsol), mean, torch.sqrt(constrained_var))
 
             costs = cost_function(samples)
             costs = torch.sum(costs, dim=1)
@@ -60,4 +59,6 @@ class CEM(Optimizer):
         # print (cost_function(mean.expand(self.pop_size, -1))[0])
 
         return mean, var, None
+
+        
 
