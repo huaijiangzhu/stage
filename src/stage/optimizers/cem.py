@@ -31,6 +31,11 @@ class CEM(Optimizer):
             constrained_var = torch.min(torch.min((lb_dist / 2)**2, (ub_dist / 2)**2), var)
             samples = truncated_normal((self.pop_size, self.nsol), mean, torch.sqrt(constrained_var))
 
+            nxa = int(self.nsol / self.horizon)
+            # some naive smoothing
+            for t in range(1, self.horizon):
+                samples[:, nxa*t:nxa*(t+1)] = 0.9*samples[:, nxa*t:nxa*(t+1)] + 0.1*samples[:, nxa*(t-1):nxa*t]
+
             costs = cost_function(samples)
             costs = torch.sum(costs, dim=1)
             

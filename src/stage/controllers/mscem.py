@@ -8,6 +8,7 @@ from stage.controllers.base import Controller
 from stage.optimizers.cem import CEM
 from stage.utils.nn import truncated_normal
 
+import pdb
 class MSCEM(nn.Module):
 
     def __init__(self, dynamics, cost, actor,
@@ -35,8 +36,8 @@ class MSCEM(nn.Module):
 
         self.cost = MSCEMCost(self.plan_horizon, self.n_particles, self.pop_size,
                               self.dynamics, self.actor, cost)
-        self.prev_sol = ((self.sol_lb + self.sol_ub)/2).repeat(self.plan_horizon)
         self.init_var = ((self.sol_ub - self.sol_lb) **2 / 16).repeat(self.plan_horizon)
+        self.reset()
 
     @torch.no_grad()
     def openloop(self, x, init_sol, horizon):
@@ -50,6 +51,7 @@ class MSCEM(nn.Module):
         self.optimizer.reset(nsol=horizon*self.nxa,
                              ub=self.sol_ub.repeat(horizon),
                              lb=self.sol_lb.repeat(horizon))
+        self.optimizer.horizon = horizon
         sol, _, opt = self.optimizer(self.cost, init_sol, init_var)
         return sol
 
@@ -72,6 +74,7 @@ class MSCEM(nn.Module):
         self.optimizer.reset(nsol=self.plan_horizon*self.nxa,
                              ub=self.sol_ub.repeat(self.plan_horizon),
                              lb=self.sol_lb.repeat(self.plan_horizon))
+        self.optimizer.horizon = self.plan_horizon
         self.prev_sol = ((self.sol_lb + self.sol_ub)/2).repeat(self.plan_horizon)
 
 

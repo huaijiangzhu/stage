@@ -12,6 +12,8 @@ from stage.utils.jacobian import JacobianNormEnsemble, AutoDiffEnsemble
 from stage.utils.nn import renew
 import tqdm
 
+import pdb
+
 class ProbabilisticEnsemble(Dynamics):
     def __init__(self, nq, nv, na, dt, dx, 
                  ensemble_size=5, learn_closed_loop_dynamics=False,
@@ -111,13 +113,13 @@ class ProbabilisticEnsemble(Dynamics):
 
     def group_as_ensemble(self, arr, n_particles):
         dim = arr.shape[-1]
-        # mat : [n_particles, dim] 
+        # mat : [b, dim] 
         reshaped = arr.view(-1, self.ensemble_size, n_particles // self.ensemble_size, dim)
-        # mat : [1, ensemble_size, n_particles // ensemble_size, dim]
+        # mat : [b // n_particles, ensemble_size, n_particles // ensemble_size, dim]
         transposed = reshaped.transpose(0, 1)
-        # mat : [ensemble_size, 1, n_particles // ensemble_size, dim]
+        # mat : [ensemble_size, b // n_particles, n_particles // ensemble_size, dim]
         reshaped = transposed.contiguous().view(self.ensemble_size, -1, dim)
-        # mat : [ensemble_size, (n_particles) // ensemble_size, dim]
+        # mat : [ensemble_size, b // ensemble_size, dim]
         return reshaped
 
     def flatten_ensemble(self, arr, n_particles):
