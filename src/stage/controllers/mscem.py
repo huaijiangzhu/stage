@@ -15,13 +15,17 @@ class MSCEM(nn.Module):
         super().__init__()
         self.nq, self.nv, self.nx = dynamics.nq, dynamics.nv, dynamics.nx
         self.actor = actor
-        self.na = actor.na
-        self.nxa = self.nx + self.na
         self.dynamics = dynamics
-        self.action_ub, self.action_lb = actor.action_ub, actor.action_lb
+
+        self.na = self.actor.na
+        self.nxa = self.nx + self.na 
 
         ### construct solution bounds
-
+        self.action_ub, self.action_lb = self.actor.action_ub, self.actor.action_lb
+        self.state_ub, self.state_lb = self.dynamics.state_ub, self.dynamics.state_lb
+        self.sol_lb = torch.cat((self.state_lb, self.action_lb))
+        self.sol_ub = torch.cat((self.state_ub, self.action_ub))
+        
         self.plan_horizon, self.n_particles = plan_horizon, n_particles
         self.pop_size = pop_size
 
@@ -65,15 +69,15 @@ class MSCEM(nn.Module):
         self.cost.ns = ns
 
     def reset(self):
-        self.optimizer.reset(sol_dim=self.plan_horizon * self.na,
-                             upper_bound=self.action_ub.repeat(self.plan_horizon),
-                             lower_bound=self.action_lb.repeat(self.plan_horizon))
-        self.prev_sol = ((self.action_lb + self.action_ub)/2).repeat(self.plan_horizon)
+        self.optimizer.reset(nsol=self.plan_horizon*self.nxa,
+                             ub=self.sol_ub.repeat(self.plan_horizon),
+                             lb=self.sol_lb.repeat(self.plan_horizon))
+        self.prev_sol = ((self.sol_lb + self.sol_ub)/2).repeat(self.plan_horizon)
 
 
 class MSCEMCost(nn.Module):
     def __init__(self, horizon, n_particles, pop_size,
-                 dynamics, actor, cost):
+                 dynamics, actor, task_cost):
         super().__init__()
         self.dynamics = dynamics
         self.actor = actor
@@ -84,7 +88,7 @@ class MSCEMCost(nn.Module):
         self.horizon = horizon
         self.n_particles = n_particles
         self.pop_size = pop_size
-        self.cost = cost
+        self.task_cost = task_cost
 
         # number of samples for Lipschitz regularization
         self.ns = 0
@@ -97,24 +101,26 @@ class MSCEMCost(nn.Module):
         sol_x[0, :, :] = obs # initial state is fixed
 
         costs = torch.zeros(self.pop_size, self.horizon)  
-        ns = self.ns      
-
         for n in range(self.horizon):
-            obs = sol_x[n]
+            x = sol_x[n]
             a = sol_a[n]
-            u = self.actor(obs, a)
             prediction = self.dynamics.sample_predictions(x, a, self.n_particles)
-            next_obs = prediction.x
+            x_ = prediction.x
 
             # gap closing cost
-            gap = next_obs - sol_x[n+1]
-            gap_cost = torch.norm(gap, p=2, dim=1)
-            print (gap_cost.shape)
+            if n < self.horizon - 1:
+                gap = x_ - sol_x[n + 1]
+            else:
+                gap = torch.zeros_like(x_)
+            gap_cost = torch.exp(torch.norm(gap, p=2, dim=1))
+            gap_cost = gap_cost.view(-1, self.n_particles)
+            # print ('x_ shape', x_.shape)
+            # print ('gap_cost shape', gap_cost.shape)
 
             # compute task related cost
-            cost = self.cost(next_obs, u).l
+            cost = self.task_cost.l(x_, a).l
             cost = cost.view(-1, self.n_particles)
-            costs[:, n] = cost.mean(dim=1) + gap_cost
+            costs[:, n] = cost.mean(dim=1) + gap_cost.mean(dim=1)
 
 
         return costs

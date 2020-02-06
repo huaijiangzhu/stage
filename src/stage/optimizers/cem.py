@@ -9,14 +9,14 @@ import pdb
 class CEM(Optimizer):
 
     def __init__(self, nsol,
-                 upper_bound=None, lower_bound=None, 
+                 ub=None, lb=None, 
                  pop_size=400, num_elites=40, max_it=5,
                  epsilon=0.001, alpha=0.1):
         super().__init__()
         self.pop_size, self.max_it = pop_size, max_it
         self.num_elites = int(self.pop_size/10)
         self.epsilon, self.alpha = epsilon, alpha
-        self.reset(nsol, upper_bound, lower_bound)
+        self.reset(nsol, ub, lb)
 
     def reset(self, nsol, ub, lb):
         self.nsol = nsol

@@ -16,7 +16,7 @@ class Cost(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x, a, t, terminal):
+    def forward(self, x, u, t, terminal):
         raise NotImplementedError
 
     ### Only autodiff is surported 

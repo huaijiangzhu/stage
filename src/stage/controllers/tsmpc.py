@@ -23,8 +23,8 @@ class TSMPC(nn.Module):
         self.pop_size = pop_size
 
         self.optimizer = CEM(nsol=self.na*self.plan_horizon, pop_size=self.pop_size,
-                             upper_bound=self.action_ub.repeat(self.plan_horizon),
-                             lower_bound=self.action_lb.repeat(self.plan_horizon))
+                             ub=self.action_ub.repeat(self.plan_horizon),
+                             lb=self.action_lb.repeat(self.plan_horizon))
 
         self.cost = TSMPCCost(self.plan_horizon, self.n_particles, self.pop_size,
                               self.dynamics, self.actor, cost)
@@ -96,10 +96,10 @@ class TSMPCCost(nn.Module):
             obs.requires_grad_(True)
             a = action_traj[n]
             b, _ = obs.shape
-
-            u = self.actor(obs, a)
             obs = obs.repeat(ns + 1, 1)
             a = a.repeat(ns + 1, 1)
+
+            
 
             # regularize Lipschitz samples
             perturbation = torch.empty(obs.shape).normal_(mean=0, std=0.1)
@@ -118,9 +118,9 @@ class TSMPCCost(nn.Module):
                 for s in range(ns):
                     reg += L[b*s:b*(s+1)]
                 reg = reg/ns
-                cost = self.cost(next_obs[:b], u).l + 0.1 * reg.view(-1, 1)
+                cost = self.cost.l(next_obs[:b], a[:b]).l + 0.1 * reg.view(-1, 1)
             else:
-                cost = self.cost(next_obs[:b], u).l
+                cost = self.cost.l(next_obs[:b], a[:b]).l
 
             cost = cost.view(-1, self.n_particles)
             costs[:, n] = cost.mean(dim=1)
