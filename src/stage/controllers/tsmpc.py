@@ -25,12 +25,10 @@ class TSMPC(nn.Module):
         self.optimizer = CEM(nsol=self.na*self.plan_horizon, pop_size=self.pop_size,
                              ub=self.action_ub.repeat(self.plan_horizon),
                              lb=self.action_lb.repeat(self.plan_horizon))
-
         self.cost = TSMPCCost(self.plan_horizon, self.n_particles, self.pop_size,
                               self.dynamics, self.actor, cost)
-
-        self.prev_sol = ((self.action_lb + self.action_ub)/2).repeat(self.plan_horizon)
         self.init_var = ((self.action_ub - self.action_lb) **2 / 16).repeat(self.plan_horizon)
+        self.reset()
 
     def regularize(self, ns):
         self.cost.ns = ns
@@ -39,6 +37,7 @@ class TSMPC(nn.Module):
         self.optimizer.reset(nsol=self.plan_horizon*self.na,
                              ub=self.action_ub.repeat(self.plan_horizon),
                              lb=self.action_lb.repeat(self.plan_horizon))
+        self.optimizer.horizon = self.plan_horizon
         self.prev_sol = ((self.action_lb + self.action_ub)/2).repeat(self.plan_horizon)
 
     @torch.no_grad()
@@ -53,6 +52,7 @@ class TSMPC(nn.Module):
         self.optimizer.reset(nsol=horizon*self.na,
                              ub=self.action_ub.repeat(horizon),
                              lb=self.action_lb.repeat(horizon))
+        self.optimizer.horizon = horizon
         sol, _, opt = self.optimizer(self.cost, init_sol, init_var)
         return sol
 
@@ -63,7 +63,6 @@ class TSMPC(nn.Module):
 
         else:
             sol = self.openloop(x, self.prev_sol, self.plan_horizon)
-            # sol, _, _ = self.optimizer(self.cost, self.prev_sol, self.init_var)
             self.prev_sol = torch.cat((sol[self.na:], (self.action_lb + self.action_ub)/2))
             a = sol[:self.na]
 

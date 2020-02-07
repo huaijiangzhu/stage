@@ -92,6 +92,7 @@ class MSCEMCost(nn.Module):
         self.n_particles = n_particles
         self.pop_size = pop_size
         self.task_cost = task_cost
+        self.shooting_interval_length = 30
 
         # number of samples for Lipschitz regularization
         self.ns = 0
@@ -103,28 +104,33 @@ class MSCEMCost(nn.Module):
         obs = self.reshape_obs(self.obs)
         sol_x[0, :, :] = obs # initial state is fixed
 
-        costs = torch.zeros(self.pop_size, self.horizon)  
-        for n in range(self.horizon):
-            x = sol_x[n]
-            a = sol_a[n]
-            prediction = self.dynamics.sample_predictions(x, a, self.n_particles)
-            x_ = prediction.x
+        
+        H = self.horizon
+        L = self.shooting_interval_length
+        L = 1
+        M = int(H / L)
+        costs = torch.zeros(self.pop_size, H)
 
+        for m in range(M):
+            x = sol_x[m * L]
+            for n in range(L):
+                a = sol_a[m * L + n]
+                prediction = self.dynamics.sample_predictions(x, a, self.n_particles)
+                cost = self.task_cost.l(prediction.x, a).l
+                cost = cost.view(-1, self.n_particles)
+                costs[:, m * L + n] = cost.mean(dim=1)
+                x = prediction.x
+            
             # gap closing cost
-            if n < self.horizon - 1:
-                gap = x_ - sol_x[n + 1]
+            if m < M - 1:
+                gap = x - sol_x[(m + 1) * L]
             else:
-                gap = torch.zeros_like(x_)
+                gap = torch.zeros_like(x) # the last shooting interval does not have gap cost
+
             gap_cost = torch.exp(torch.norm(gap, p=2, dim=1))
             gap_cost = gap_cost.view(-1, self.n_particles)
-            # print ('x_ shape', x_.shape)
-            # print ('gap_cost shape', gap_cost.shape)
-
-            # compute task related cost
-            cost = self.task_cost.l(x_, a).l
-            cost = cost.view(-1, self.n_particles)
-            costs[:, n] = cost.mean(dim=1) + gap_cost.mean(dim=1)
-
+            gap_cost -= torch.ones_like(gap_cost)
+            costs[:, m * L + L - 1] += L * gap_cost.mean(dim=1)
 
         return costs
 
