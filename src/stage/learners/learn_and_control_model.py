@@ -41,6 +41,7 @@ class LearnAndControlModel(Learner):
             
             if verbose:
                 print ('Iteration: ', i)
+                print ('Initial state: ', x)
                 ro = np.sum([log[i].obs_reward for i in range(self.task.task_horizon)])
                 ra = np.sum([log[i].act_reward for i in range(self.task.task_horizon)])
                 print ("avg. decision time: ", (end - start)/self.task.task_horizon)
