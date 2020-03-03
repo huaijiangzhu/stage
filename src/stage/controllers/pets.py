@@ -8,7 +8,7 @@ from stage.controllers.base import Controller
 from stage.optimizers.cem import CEM
 from stage.utils.nn import truncated_normal
 
-class TSMPC(nn.Module):
+class PETS(nn.Module):
 
     def __init__(self, dynamics, cost, actor,
                  plan_horizon, n_particles, pop_size):
@@ -25,7 +25,7 @@ class TSMPC(nn.Module):
         self.optimizer = CEM(nsol=self.na*self.plan_horizon, pop_size=self.pop_size,
                              ub=self.action_ub.repeat(self.plan_horizon),
                              lb=self.action_lb.repeat(self.plan_horizon))
-        self.cost = TSMPCCost(self.plan_horizon, self.n_particles, self.pop_size,
+        self.cost = PETSCost(self.plan_horizon, self.n_particles, self.pop_size,
                               self.dynamics, self.actor, cost)
         self.init_var = ((self.action_ub - self.action_lb) **2 / 16).repeat(self.plan_horizon)
         self.reset()
@@ -68,7 +68,7 @@ class TSMPC(nn.Module):
 
         return a
 
-class TSMPCCost(nn.Module):
+class PETSCost(nn.Module):
     def __init__(self, horizon, n_particles, pop_size,
                  dynamics, actor, cost):
         super().__init__()
