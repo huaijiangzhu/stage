@@ -1,5 +1,10 @@
 # data
-data/
+*.npy
+*.pkl
+
+# plots
+*.png
+*.eps
 
 # mujoco 
 mjkey.txt
