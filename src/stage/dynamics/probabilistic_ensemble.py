@@ -15,14 +15,13 @@ import tqdm
 import pdb
 
 class ProbabilisticEnsemble(Dynamics):
-    def __init__(self, nq, nv, na, dt, dx, 
-                 ensemble_size=5, learn_closed_loop_dynamics=False,
+    def __init__(self, nx, nq, nv, na, dt, dx, 
+                 ensemble_size=5,
                  learning_rate=0.005):
-        super().__init__(nq + nv, nq, nv, na, dt)
-        self.learn_closed_loop_dynamics = learn_closed_loop_dynamics
+        super().__init__(nx, nq, nv, na, dt)
         self.nin = self.nx + self.na
         self.nout = 2 * self.nx
-        self.dx = dx(ensemble_size, self.nx, self.na)
+        self.dx = dx(ensemble_size, self.nx, self.nq, self.na)
         self.opt = optim.Adam(self.dx.parameters(), lr=learning_rate)
         self.ensemble_size = ensemble_size
         self.d = AutoDiffEnsemble()
@@ -157,25 +156,27 @@ class ProbabilisticEnsemble(Dynamics):
         self.dx.eval()
 
 class Dx(nn.Module):
-    def __init__(self, ensemble_size, nx, na):
+    def __init__(self, ensemble_size, nx, nq, na, first_joint_id=0):
         super().__init__()
-        self.ensemble_size, self.nx, self.na = ensemble_size, nx, na
+        self.ensemble_size, self.nx, self.nq, self.na = ensemble_size, nx, nq, na
+        self.first_joint_id = 0
         self.nin = nx + na
         self.nout = 2 * nx
-        self.inputs_mu = nn.Parameter(torch.zeros(self.nin), requires_grad=False)
-        self.inputs_sigma = nn.Parameter(torch.zeros(self.nin), requires_grad=False)
+        self.data_mu = nn.Parameter(torch.zeros(self.nin + self.nq), requires_grad=False)
+        self.data_sigma = nn.Parameter(torch.zeros(self.nin + self.nq), requires_grad=False)
         self.max_logvar = nn.Parameter(torch.ones(1, self.nx) / 2.0)
         self.min_logvar = nn.Parameter(-torch.ones(1, self.nx) * 10.0)
         self.jac_norm = JacobianNormEnsemble()
         self.lambda_jac_reg = 0.01
 
     def normalize(self, inputs):
+        nb, dim = inputs.shape
+        inputs = self.embed(inputs.view(1, nb, dim)).view(nb, dim + self.nq)
         mu = inputs.mean(dim=0)
         sigma = inputs.std(dim=0)
         sigma[sigma < 1e-12] = 1.0
-
-        self.inputs_mu.data = mu.data
-        self.inputs_sigma.data = sigma.data
+        self.data_mu.data = mu.data
+        self.data_sigma.data = sigma.data
 
     def compute_loss(self, xa, dx, mse=False):
         # regularization
@@ -200,18 +201,38 @@ class Dx(nn.Module):
             loss += reg            
         return loss
 
+    def embed(self, inputs):
+        start = self.first_joint_id
+        ensemble_size, nb, dim = inputs.shape
+
+        embedded = torch.zeros(ensemble_size, nb, dim + self.nq)
+        q = inputs[:, :, start : start + self.nq]
+        q = q.view(ensemble_size * nb, self.nq)
+        
+        cos = torch.cos(q)
+        sin = torch.sin(q)
+        cs = torch.cat((cos, sin), dim=-1)
+        cs = cs.view(ensemble_size, nb, 2 * self.nq)
+
+        embedded[:, :, :start] = inputs[:, :, :start]
+        embedded[:, :, start : start + 2 * self.nq] = cs
+        embedded[:, :, start + 2 * self.nq:] = inputs[:, :, start + self.nq:]
+        return embedded
+        
+
 class DefaultDx(Dx):
-    def __init__(self, ensemble_size, nx, na):
-        super().__init__(ensemble_size, nx, na)
-        self.lin0_w, self.lin0_b = get_affine_params(self.ensemble_size, self.nin, 300)
+    def __init__(self, ensemble_size, nx, nq, na, first_joint_id=0):
+        super().__init__(ensemble_size, nx, nq, na, first_joint_id)
+        self.lin0_w, self.lin0_b = get_affine_params(self.ensemble_size, self.nin + self.nq, 300)
         self.lin1_w, self.lin1_b = get_affine_params(self.ensemble_size, 300, 300)
         self.lin2_w, self.lin2_b = get_affine_params(self.ensemble_size, 300, 300)
         self.lin3_w, self.lin3_b = get_affine_params(self.ensemble_size, 300, 300)
         self.lin4_w, self.lin4_b = get_affine_params(self.ensemble_size, 300, self.nout)
         
     def forward(self, inputs, return_logvar=False):
+        inputs = self.embed(inputs)
 
-        inputs = (inputs - self.inputs_mu) / self.inputs_sigma
+        inputs = (inputs - self.data_mu) / self.data_sigma
 
         inputs = inputs.matmul(self.lin0_w) + self.lin0_b
         inputs = swish(inputs)
@@ -246,6 +267,8 @@ class DefaultDx(Dx):
         lin4_decays = 0.00075 * (self.lin4_w ** 2).sum() / 2.0
 
         return lin0_decays + lin1_decays + lin2_decays + lin3_decays + lin4_decays
+
+
 
 
 

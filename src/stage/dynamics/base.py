@@ -23,4 +23,7 @@ class Dynamics(nn.Module):
 
     def wrap(self, q):
         return torch.atan2(torch.sin(q), torch.cos(q))
+    
+    def embed_torus(self, q, ids):
+        raise NotImplementedError
 
