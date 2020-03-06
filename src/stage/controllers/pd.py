@@ -5,9 +5,9 @@ import torch.optim as optim
 from stage.controllers.base import Controller
 
 class PD(Controller):
-    def __init__(self, nq, nv, nu):
-        super().__init__(nq, nv, nu)
-        self.nx = nq + nv  
+    def __init__(self, nx, nq, nv, nu):
+        super().__init__(nx, nq, nv, nu)
+        self.nparams = 2 * self.nq 
 
     def forward(self, x, params):
         x_dim = x.ndimension()
@@ -19,12 +19,13 @@ class PD(Controller):
             # add batch size dimension
             params = params.unsqueeze(0)
 
-        Kp = params[:, :self.nq]
+        start = self.nx - 2 * self.nq
+        Kp = params[: , : self.nq]
         Kd = 2 * torch.sqrt(Kp)
-        g = params[:, self.nq:2*self.nq]
+        g = params[: , self.nq : 2 * self.nq]
 
-        q = x[:, :self.nq]
-        v = x[:, self.nq:self.nx]
+        q = x[:, start : start + self.nq]
+        v = x[:, start + self.nq : self.nx]
         e = self.wrap(g - q)
         
         return Kp * e - Kd * v

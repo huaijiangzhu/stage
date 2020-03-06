@@ -13,7 +13,7 @@ class PETS(nn.Module):
     def __init__(self, dynamics, cost, actor,
                  plan_horizon, n_particles, pop_size):
         super().__init__()
-        self.nq, self.nv = dynamics.nq, dynamics.nv
+        self.nx, self.nq, self.nv = dynamics.nx, dynamics.nq, dynamics.nv
         self.actor = actor
         self.na = actor.na
         self.dynamics = dynamics

@@ -3,11 +3,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from stage.controllers.base import Controller
+from stage.utils.nn import swish, bmv
 
 class MLP(Controller):
-    def __init__(self, nq, nv, nu):
-        super().__init__(nq, nv, nu)
-        self.nx = nq + nv  
+    def __init__(self, nx, nq, nv, nu, shape=[10, 10]):
+        super().__init__(nx, nq, nv, nu)
+        self.shape = shape
+
+        self.nparams = 0
+        nin = self.nx
+        for nout in self.shape:
+            self.nparams += nout * nin + nout
+            nin = nout
+        nout = self.nu
+        self.nparams += nout * nin + nout
 
     def forward(self, x, params):
         x_dim = x.ndimension()
@@ -19,15 +28,28 @@ class MLP(Controller):
             # add batch size dimension
             params = params.unsqueeze(0)
 
-        Kp = params[:, :self.nq]
-        Kd = 2 * torch.sqrt(Kp)
-        g = params[:, self.nq:2*self.nq]
+        nb, dim = x.shape
+        W = []
+        b = []
 
-        q = x[:, :self.nq]
-        v = x[:, self.nq:self.nx]
-        e = self.wrap(g - q)
-        
-        return Kp * e - Kd * v
+        start = 0
+        nin = self.nx
+        inputs = x
+
+        for nout in self.shape:
+            w = params[:, start : start + nout * nin]
+            w = w.view(nb, nout, nin)
+            b = params[:, start + nout * nin: start + nout * (nin + 1)]
+            start = start + nout * (nin + 1)
+            nin = nout
+            inputs = swish(bmv(w, inputs) + b)
+
+        nout = self.nu
+        w = params[:, start : start + nout * nin]
+        w = w.view(nb, nout, nin)
+        b = params[:, start + nout * nin: start + nout * (nin + 1)]
+
+        return bmv(w, inputs) + b
 
 
     

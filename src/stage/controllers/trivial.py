@@ -7,18 +7,17 @@ from stage.utils.nn import truncated_normal
 
 
 class Identity(Controller):
-    def __init__(self, nq, nv, nu):
-        super().__init__(nq, nv, nu)
-        self.nx = nq + nv  
+    def __init__(self, nx, nq, nv, nu):
+        super().__init__(nx, nq, nv, nu)
+        self.nparams = self.nu
     
     def forward(self, x, params, random=False):
         return torch.Tensor(params)
 
 class RandomController(Controller):
-    def __init__(self, nx, actor):
-        super().__init__(actor.nq, actor.nv, actor.nu)
-        self.nx = nx
-        self.na = actor.na
+    def __init__(self, actor):
+        super().__init__(actor.nx, actor.nq, actor.nv, actor.nu)
+        self.nx, self.na = actor.nx, actor.na
         self.actor = actor
         self.action_lb = actor.action_lb
         self.action_ub = actor.action_ub
@@ -33,10 +32,10 @@ class RandomController(Controller):
         return a
 
 class OpenLoop(Controller):
-    def __init__(self, nx, actor, actions):
-        super().__init__(actor.nq, actor.nv, actor.nu)
-        self.nx = nx
-        self.na = actor.na
+    def __init__(self, actor, actions):
+        super().__init__(actor.nx, actor.nq, actor.nv, actor.nu)
+        self.nx, self.na = actor.nx, actor.na
+        
         ## TODO some dim. check here
         self.actions = torch.Tensor(actions)
         self.actor = actor

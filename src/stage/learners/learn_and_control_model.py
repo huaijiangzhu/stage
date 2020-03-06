@@ -29,7 +29,7 @@ class LearnAndControlModel(Learner):
             start = time.time()
             
             if self.data_train is None:
-                random_controller = RandomController(self.task.nx, self.controller.actor)
+                random_controller = RandomController(self.controller.actor)
                 self.data_train, log = self.task.unroll(x, random_controller, random=True)
                 end = time.time()
                 self.dynamics.learn(self.data_train, self.epochs, batch_size=self.batch_size, verbose=verbose)

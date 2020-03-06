@@ -4,17 +4,16 @@ from stage.utils.nn import truncated_normal
 
 class Actor(nn.Module):
 
-    def __init__(self, na, decoder,
+    def __init__(self, controller,
                  action_lb=None, action_ub=None, 
                  normalize=False):
         super().__init__()
-        self.na = na
-        self.nq, self.nv, self.nu = decoder.nq, decoder.nv, decoder.nu
-        self.decoder = decoder
+        self.controller = controller
+        self.nx, self.nq, self.nv, self.nu, self.na = self.controller.get_dim()
         self.action_lb, self.action_ub = action_lb, action_ub
 
     def forward(self, x, a):
-        return self.decoder(x, a)
+        return self.controller(x, a)
 
     def sample(self, mean=None, var=None, horizon=1):
 

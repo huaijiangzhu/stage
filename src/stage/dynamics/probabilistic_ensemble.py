@@ -159,7 +159,7 @@ class Dx(nn.Module):
     def __init__(self, ensemble_size, nx, nq, na, first_joint_id=0):
         super().__init__()
         self.ensemble_size, self.nx, self.nq, self.na = ensemble_size, nx, nq, na
-        self.first_joint_id = 0
+        self.first_joint_id = nx - 2 * nq
         self.nin = nx + na
         self.nout = 2 * nx
         self.data_mu = nn.Parameter(torch.zeros(self.nin + self.nq), requires_grad=False)
