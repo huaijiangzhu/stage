@@ -2,6 +2,9 @@
 *.npy
 *.pkl
 
+# Mac
+.DS_Store
+
 # plots
 *.png
 *.eps
