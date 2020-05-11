@@ -5,7 +5,7 @@ import torch.optim as optim
 
 class Controller(nn.Module):
     def __init__(self, nx, nq, nv, nu):
-        super(Controller, self).__init__()
+        super().__init__()
         self.nx, self.nq, self.nv, self.nu = nx, nq, nv, nu
         
     def forward(self, x, params):

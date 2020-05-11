@@ -52,20 +52,6 @@ def jacobian_vector_product(y, x, v, create_graph=False):
  
     return vJ
 
-## batch operations
-
-def beye(nb, n1, n2):
-    x = torch.eye(n1, n2)
-    x = x.reshape((1, n1, n2))
-    y = x.repeat(nb, 1, 1)
-    return y
-
-def bsm(s, A):
-    nb, n1, n2 = A.shape
-    s = s.repeat(1, n1).repeat(1, n2)
-    s = s.reshape(nb, n1, n2)
-    return s * A
-
 def bmv(A, x):
     return A.bmm(x.unsqueeze(2)).squeeze(2)
 
@@ -74,13 +60,5 @@ def bdot(x, y):
 
 def bquad(Q, x):
     return x.unsqueeze(1).bmm(Q).bmm(x.unsqueeze(2)).squeeze(1)
-
-def bexpand(x, n_batch, ndim):
-    if x.ndimension() in (0, ndim):
-        return x
-    elif x.ndimension() == ndim - 1:
-        return x.unsqueeze(0).expand(*([n_batch] + list(x.size())))
-    else:
-        raise RuntimeError("Unexpected number of dimensions.")
 
 
