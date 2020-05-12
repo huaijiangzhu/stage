@@ -117,13 +117,14 @@ class DefaultCost(Cost):
     #     return bquad(Q, diffx)
 
     # task-space cost
+    
     def obs_cost(self, x, t=0, terminal=False):
         
         q = x[:, :self.nq]
         ee_pos = self.fwk(q, 1)[:, :3, 3]
         diff = ee_pos - self.desired_ee_pos
         Q = beye(1, 3, 3)
-        Q = Q.expand(x.shape[0], *self.Q.shape[1:])
+        Q = Q.expand(x.shape[0], *Q.shape[1:])
 
         return bquad(Q, diff)
 
