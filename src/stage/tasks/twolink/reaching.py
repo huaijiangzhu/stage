@@ -14,9 +14,12 @@ from stage.tasks.base import Task
 from stage.costs.cost import Cost
 from stage.controllers.trivial import Identity, OpenLoop
 
-from stage.utils.nn import bquad, flatten_non_batch
+from stage.utils.nn import beye, bquad, flatten_non_batch
 from stage.utils.jacobian import AutoDiff
 from stage.utils.nn import renew
+
+from stage.utils.robotics import ForwardKinematics
+from stage.tasks.twolink.params import JOINT_XYZ, JOINT_RPY, JOINT_AXIS, LINK_XYZ
 
 class TwoLinkReaching(Task):
     env_name = "TwoLink-v0"
@@ -75,8 +78,11 @@ class DefaultCost(Cost):
     def __init__(self):
         super().__init__()
         self.nx = 4
+        self.nq = 2
         self.nu = 2
+        self.fwk = ForwardKinematics(self.nq, JOINT_XYZ, JOINT_RPY, JOINT_AXIS, LINK_XYZ)
         self.desired = torch.zeros(self.nx)
+        self.desired_ee_pos = torch.Tensor([0, 0, 1.625])
         self.Q = torch.diag(torch.Tensor([1,1,0,0])).unsqueeze(0)
         self.R = 1e-5 * torch.eye(self.nu).unsqueeze(0)
         self.d = AutoDiff()
@@ -101,13 +107,25 @@ class DefaultCost(Cost):
 
         return cost
 
+    # # state-space cost
+    # def obs_cost(self, x, t=0, terminal=False):
+        
+    #     x = x[:, :self.nx]
+    #     diffx = x - self.desired
+    #     Q = self.Q.expand(x.shape[0], *self.Q.shape[1:])
+
+    #     return bquad(Q, diffx)
+
+    # task-space cost
     def obs_cost(self, x, t=0, terminal=False):
         
-        x = x[:, :self.nx]
-        diffx = x - self.desired
-        Q = self.Q.expand(x.shape[0], *self.Q.shape[1:])
+        q = x[:, :self.nq]
+        ee_pos = self.fwk(q, 1)[:, :3, 3]
+        diff = ee_pos - self.desired_ee_pos
+        Q = beye(1, 3, 3)
+        Q = Q.expand(x.shape[0], *self.Q.shape[1:])
 
-        return bquad(Q, diffx)
+        return bquad(Q, diff)
 
     def action_cost(self, u, t=0, terminal=False):
 

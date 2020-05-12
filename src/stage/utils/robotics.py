@@ -1,64 +1,125 @@
 import torch
 import torch.nn as nn
-import numpy as np
-import torch.autograd as autograd
+from stage.utils.nn import beye, bsm, flatten_non_batch
 
-def use_gpu():
-    torch.set_default_tensor_type(torch.cuda.FloatTensor if torch.cuda.is_available() 
-                                                         else torch.FloatTensor)
-def flip(x, dim):
-    xsize = x.size()
-    dim = x.dim() + dim if dim < 0 else dim
-    x = x.view(-1, *xsize[dim:])
-    x = x.view(x.size(0), x.size(1), -1)[:, getattr(torch.arange(x.size(1)-1, 
-                      -1, -1), ('cpu','cuda')[x.is_cuda])().long(), :]
-    return x.view(xsize)
+def cross_product_matrix(v):
+    nb, dim = v.shape
+    assert dim==3
+    v1, v2, v3 = v[:, 0:1], v[:, 1:2], v[:, 2:3]
+    v_hat = torch.cat((torch.zeros(nb, 1), -v3, v2, 
+                       v3, torch.zeros(nb, 1), -v1, 
+                       -v2, v1, torch.zeros(nb, 1)), dim=1)
+    v_hat = v_hat.reshape(nb, 3, 3)
+    return v_hat
 
-def flatten_non_batch(x):
-    return x.view(x.shape[0], -1)
+def rodrigues_formula(w, th):
+    if w.ndimension() == 1:
+        w = w.unsqueeze(0)
+    if th.ndimension() == 1:
+        th = th.unsqueeze(0)
+        th = th.reshape(-1, 1)
+    nb, dim = w.shape
+    assert dim==3
+    w_hat = cross_product_matrix(w)
+    w_norm = torch.norm(w, dim=1, keepdim=True)
+    exp_wth = beye(nb, 3, 3)
+    exp_wth += bsm(torch.sin(w_norm * th) / w_norm, w_hat)
+    w_hat_squared = torch.bmm(w_hat, w_hat)
+    exp_wth += bsm((1-torch.cos(w_norm * th)) / (w_norm ** 2), w_hat_squared)
+    return exp_wth
 
-def renew(x):
-    return x.clone().detach()
+def Rx(th):
+    th = th.reshape(-1,1)
+    nb, _ = th.shape
+    axis = torch.Tensor([1,0,0]).repeat(nb, 1)
+    return rodrigues_formula(axis, th)
 
-def truncated_normal(shape, mean, std):
-    tensor = torch.zeros(shape)
-    tmp = tensor.new_empty(shape + (4,)).normal_()
-    valid = (tmp < 2) & (tmp > -2)
-    ind = valid.max(-1, keepdim=True)[1]
-    tensor.data.copy_(tmp.gather(-1, ind).squeeze(-1))
-    tensor.data.mul_(std).add_(mean)
-    return tensor
+def Ry(th):
+    th.reshape(-1,1)
+    nb, _ = th.shape
+    axis = torch.Tensor([0,1,0]).repeat(nb, 1)
+    return rodrigues_formula(axis, th)
 
-def get_affine_params(ensemble_size, in_features, out_features):
-    shape = (ensemble_size, in_features, out_features)
-    w = truncated_normal(shape=shape, mean=torch.zeros(shape),
-                         std=1.0 / (2.0 * np.sqrt(in_features)))
-    w = nn.Parameter(w)
-    b = nn.Parameter(torch.zeros(ensemble_size, 1, out_features))
+def Rz(th):
+    th.reshape(-1,1)
+    nb, _ = th.shape
+    axis = torch.Tensor([0,0,1]).repeat(nb, 1)
+    return rodrigues_formula(axis, th)
 
-    return w, b
+def rpy_to_rotation_matrix(rpy):
+    roll, pitch, yaw = rpy[:, 0:1], rpy[:, 1:2], rpy[:, 2:3]
+    R = torch.bmm(Rz(yaw), torch.bmm(Ry(pitch), Rx(roll)))
+    return R
 
-def swish(x):
-    return x * torch.sigmoid(x)
+class ForwardKinematics(nn.Module):
+    '''
+    Warning: be very careful with this, only works for fixed-base manipulator
+    with revolute joints.
+    '''
+    
+    def __init__(self, nq, joint_xyz, joint_rpy, joint_axis, link_xyz):
+        super().__init__()
+        self.nq, self.joint_axis = nq, joint_axis
+        self.joints = self.joint_frame_chain(joint_xyz, joint_rpy)
+        self.links = self.link_frame_chain(link_xyz)
+        
+    def forward(self, q, idx):
+        nb, nq = q.shape[0:2]
+        q = q.reshape(-1,1)
+        axis = self.joint_axis.repeat(nb, 1)
+        Tq = self.joint_rotation(axis, q)
+        T = torch.bmm(self.joints.repeat(nb, 1, 1), Tq)
+        T = T.reshape(nb, -1, 4, 4)
+        T_world = beye(nb, 4, 4)
+        for j in range(nq):
+            T_world = torch.bmm(T_world, T[:, j, :, :])
+        T_local = self.links[idx, :, :]
+        T_local = T_local.unsqueeze(0).repeat(nb, 1, 1)
+        T = torch.bmm(T_world, T_local)
+        return T
+        
+    def joint_frame_chain(self, xyz, rpy):
+        if xyz.ndimension() == 1:
+            xyz = xyz.unsqueeze(0)
+        if rpy.ndimension() == 1:
+            rpy = rpy.unsqueeze(0)
+        R = rpy_to_rotation_matrix(rpy)
+        xyz = xyz.unsqueeze(-1)
+        rpy = rpy.unsqueeze(-1)
+        T = torch.cat((R, xyz), dim=-1)
+        T = flatten_non_batch(T)
+        nb = T.shape[0]
+        last_row = torch.Tensor([0,0,0,1]).repeat(nb, 1)
+        T = torch.cat((T, last_row), dim=-1).reshape(-1, 4, 4)
+        return T
+        
+    def link_frame_chain(self, xyz, rpy=None):
+        if rpy is None:
+            rpy = torch.zeros_like(xyz)
 
-def jacobian_vector_product(y, x, v, create_graph=False):
-    # this computes v' * dy/dx
-    flat_y = y.reshape(-1)
-    flat_v = v.reshape(-1)
-    vJ, = torch.autograd.grad(flat_y, x, flat_v, 
-                              retain_graph=True,
-                              allow_unused=True,
-                              create_graph=create_graph)
- 
-    return vJ
+        if xyz.ndimension() == 1:
+            xyz = xyz.unsqueeze(0)
+        if rpy.ndimension() == 1:
+            rpy = rpy.unsqueeze(0)
 
-def bmv(A, x):
-    return A.bmm(x.unsqueeze(2)).squeeze(2)
-
-def bdot(x, y):
-    return torch.bmm(x.unsqueeze(1), y.unsqueeze(2)).squeeze(1)
-
-def bquad(Q, x):
-    return x.unsqueeze(1).bmm(Q).bmm(x.unsqueeze(2)).squeeze(1)
-
-
+        R = rpy_to_rotation_matrix(rpy)
+        xyz = xyz.unsqueeze(-1)
+        rpy = rpy.unsqueeze(-1)
+        T = torch.cat((R, xyz), dim=-1)
+        T = flatten_non_batch(T)
+        nb = T.shape[0]
+        last_row = torch.Tensor([0,0,0,1]).repeat(nb, 1)
+        T = torch.cat((T, last_row), dim=-1).reshape(-1, 4, 4)
+        return T
+    
+    def joint_rotation(self, axis, q):
+        if axis.ndimension() == 1:
+            axis = axis.unsqueeze(0)
+        T = rodrigues_formula(axis, q)
+        nb = T.shape[0]
+        last_col = torch.Tensor([0,0,0]).reshape(-1,1).unsqueeze(0).repeat(nb, 1, 1)
+        T = torch.cat((T, last_col), dim=-1)
+        T = flatten_non_batch(T)
+        last_row = torch.Tensor([0,0,0,1]).repeat(nb, 1)
+        T = torch.cat((T, last_row), dim=-1).reshape(-1, 4, 4)
+        return T
