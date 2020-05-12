@@ -1,6 +1,8 @@
-## kinematics params
 import torch
+from stage.utils.nn import use_gpu
+use_gpu()
 
+## kinematics params
 JOINT_XYZ = torch.Tensor([[0, 0, 0.1575],
                           [0, 0, 0.2025],
                           [0.2045, 0, 0],
