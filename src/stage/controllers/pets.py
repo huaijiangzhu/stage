@@ -117,7 +117,7 @@ class PETSCost(nn.Module):
                 for s in range(ns):
                     reg += L[b*s:b*(s+1)]
                 reg = reg/ns
-                cost = self.cost.l(next_obs[:b], a[:b]).l + 0.1 * reg.view(-1, 1)
+                cost = self.cost.l(next_obs[:b], a[:b]).l + 0.05 * reg.view(-1, 1)
             else:
                 cost = self.cost.l(next_obs[:b], a[:b]).l
 
