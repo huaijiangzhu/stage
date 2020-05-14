@@ -47,9 +47,11 @@ class TwoLinkReaching(Task):
         self.cost.desired = torch.Tensor(goal)
 
     def perform(self, goal, controller):
+            
         x = self.reset(goal, noise=False)
+        controller.reset()
+        
         start = time.time()
-
         data, log = self.unroll(x, controller) 
         end = time.time()
 
@@ -122,11 +124,13 @@ class DefaultCost(Cost):
         
         q = x[:, :self.nq]
         ee_pos = self.fwk(q, 1)[:, :3, 3]
-        diff = ee_pos - self.desired_ee_pos
+        obstacle_pos = torch.Tensor([1.0960, 0.0000, 1.1710])
+        diff_goal = ee_pos - self.desired_ee_pos
+        diff_obstacle = ee_pos - obstacle_pos
         Q = beye(1, 3, 3)
         Q = Q.expand(x.shape[0], *Q.shape[1:])
 
-        return bquad(Q, diff)
+        return bquad(Q, diff_goal) + 10 * torch.exp(- 100 * bquad(Q,diff_obstacle))
 
     def action_cost(self, u, t=0, terminal=False):
 

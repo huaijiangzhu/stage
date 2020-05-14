@@ -63,6 +63,7 @@ class KukaReaching(Task):
 
     def perform(self, goal, controller):
         x = self.reset(goal, noise=False)
+        controller.reset()
         start = time.time()
 
         data, log = self.unroll(x, controller) 
