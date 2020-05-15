@@ -23,7 +23,7 @@ from stage.tasks.twolink.params import JOINT_XYZ, JOINT_RPY, JOINT_AXIS, LINK_XY
 
 class TwoLinkReaching(Task):
     env_name = "TwoLink-v0"
-    task_horizon = 100
+    task_horizon = 200
     nq, nv, nu, nx = 2, 2, 2, 4
     goal = np.array([0, 0, 0, 0])
     
@@ -40,15 +40,15 @@ class TwoLinkReaching(Task):
         self.q_ub = torch.Tensor([3.2, 3.2])
         self.q_lb = torch.Tensor([-3.2, -3.2])
 
-    def update_goal(self, goal, noise=False):
-        if noise:
-            goal += np.random.normal(loc=0, scale=0.1, size=(self.nx))
+    def update_goal(self, goal, noise_std=0.1):
+        if noise_std > 0:
+            goal += np.random.normal(loc=0, scale=noise_std, size=(self.nx))
         
         self.cost.desired = torch.Tensor(goal)
 
     def perform(self, goal, controller):
             
-        x = self.reset(goal, noise=False)
+        x = self.reset(goal, noise_std=0)
         controller.reset()
         
         start = time.time()
@@ -64,12 +64,14 @@ class TwoLinkReaching(Task):
 
         return data, log
 
-    def reset(self, goal=None, noise=False):
+    def reset(self, goal=None, noise_std=0.1):
         super().reset()
         if goal is None:
             goal = self.goal
-        self.update_goal(goal, noise)
-        q = np.array([0.5*np.pi, 0])
+        self.update_goal(goal, noise_std)
+        q = np.array([0.75 * np.pi, 0]) 
+        if noise_std > 0:
+         q += np.random.normal(loc=0, scale=noise_std, size=(self.nq))
         v = np.zeros(self.nv)
         obs, _, _, _ = self.env.reset((q, v))
         x = torch.Tensor(obs[:self.nx])
