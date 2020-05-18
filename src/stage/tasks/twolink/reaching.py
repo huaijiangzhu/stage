@@ -25,7 +25,7 @@ class TwoLinkReaching(Task):
     env_name = "TwoLink-v0"
     task_horizon = 200
     nq, nv, nu, nx = 2, 2, 2, 4
-    goal = np.array([0, 0, 0, 0])
+    goal = np.array([0.0, 0.0, 0.0, 0.0])
     
 
     def __init__(self, 
@@ -35,7 +35,7 @@ class TwoLinkReaching(Task):
 
         self.cost = DefaultCost()
         super().__init__(dt_env, dt_control, self.cost, render)
-        self.update_goal(self.goal, noise=False)
+        self.update_goal(self.goal, noise_std=0.1)
 
         self.q_ub = torch.Tensor([3.2, 3.2])
         self.q_lb = torch.Tensor([-3.2, -3.2])
