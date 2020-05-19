@@ -14,9 +14,12 @@ from stage.tasks.base import Task
 from stage.costs.cost import Cost
 from stage.controllers.trivial import Identity, OpenLoop
 
-from stage.utils.nn import bquad, flatten_non_batch
+from stage.utils.nn import beye, bquad, flatten_non_batch
 from stage.utils.jacobian import AutoDiff
 from stage.utils.nn import renew
+
+from stage.utils.robotics import ForwardKinematics
+from stage.tasks.kuka.params import JOINT_XYZ, JOINT_RPY, JOINT_AXIS, LINK_XYZ
 
 class KukaReaching(Task):
     env_name = "Kuka-v0"
@@ -32,18 +35,19 @@ class KukaReaching(Task):
 
         self.cost = DefaultCost()
         super().__init__(dt_env, dt_control, self.cost, render)
-        self.update_goal(self.goal, noise=False)
+        self.update_goal(self.goal, noise_std=0)
 
         self.q_ub = torch.Tensor(self.env.q_ub)
         self.q_lb = torch.Tensor(self.env.q_lb)
 
-    def update_goal(self, goal, noise=False):
-        if noise:
-            goal += np.random.normal(loc=0, scale=0.1, size=(self.nx))
+    def update_goal(self, goal, noise_std=0):
+        if noise_std > 0:
+            goal += np.random.normal(loc=0, scale=noise_std, size=(3))
 
         q_desired = p.calculateInverseKinematics(self.env.robot_id,
                                                  6,
-                                                 goal)        
+                                                 goal)
+
         self.cost.desired = torch.cat([torch.Tensor(q_desired), torch.zeros(self.nq)])
 
     def act(self, x, controller, params, random):
@@ -62,7 +66,7 @@ class KukaReaching(Task):
         return x, reward, done, info
 
     def perform(self, goal, controller):
-        x = self.reset(goal, noise=False)
+        x = self.reset(goal, noise_std=0)
         controller.reset()
         start = time.time()
 
@@ -78,48 +82,23 @@ class KukaReaching(Task):
 
         return data, log
 
-    def reset(self, goal=None, noise=False):
+    def reset(self, goal=None, noise_std=0):
         super().reset()
         if goal is None:
             goal = self.goal
-        self.update_goal(goal, noise)
+        self.update_goal(goal, noise_std)
         obs, _, _, _ = self.env.reset()
         x = torch.Tensor(obs[:self.nx])
         return x
 
-# class KukaCost(Cost):
-#     def __init__(self):
-#         super().__init__()
-#         self.desired = torch.zeros(7)
-#         self.lambda_a = 1e-6
-
-#     def forward(self, x, a):
-#         cost = DotMap()
-#         cost.obs = self.obs_cost(x)
-#         cost.act = self.action_cost(a)
-#         cost.total = cost.obs + cost.act
-#         return cost
-
-#     def obs_cost(self, x):
-#         if x.ndimension() == 1:
-#             x = x.unsqueeze(0)
-#         q = x[:, :7]
-#         v = x[:, 7:14]
-#         diff_q = q - self.desired[:7]
-#         return torch.sum(diff_q**2, dim=1) 
-
-#     def action_cost(self, a):
-#         if a.ndimension() == 1:
-#             a = a.unsqueeze(0)
-#         return self.lambda_a * (a ** 2).sum(dim=1)
-
-
 class DefaultCost(Cost):
     def __init__(self):
         super().__init__()
+        self.nq = 7
         self.nx = 14
         self.nu = 7
         self.desired = torch.zeros(self.nx)
+        self.fwk = ForwardKinematics(self.nq, JOINT_XYZ, JOINT_RPY, JOINT_AXIS, LINK_XYZ)
         self.Q = torch.diag(torch.Tensor([1,1,1,1,1,1,1,0,0,0,0,0,0,0])).unsqueeze(0)
         self.R = 1e-6 * torch.eye(self.nu).unsqueeze(0)
         self.d = AutoDiff()
@@ -144,12 +123,24 @@ class DefaultCost(Cost):
 
         return cost
 
+    # def obs_cost(self, x, t=0, terminal=False):
+        
+    #     x = x[:, :self.nx]
+    #     diffx = x - self.desired
+    #     Q = self.Q.expand(x.shape[0], *self.Q.shape[1:])
+    #     return bquad(Q, diffx)
+
     def obs_cost(self, x, t=0, terminal=False):
         
-        x = x[:, :self.nx]
-        diffx = x - self.desired
-        Q = self.Q.expand(x.shape[0], *self.Q.shape[1:])
-        return bquad(Q, diffx)
+        q = x[:, :self.nq]
+        ee_pos = self.fwk(q, 1)[:, :3, 3]
+        # obstacle_pos = torch.Tensor([1.0960, 0.0000, 1.1710])
+        # diff_obstacle = ee_pos - obstacle_pos
+        diff_goal = ee_pos - torch.Tensor([0.2, 0.5, 0.1])
+        Q = beye(1, 3, 3)
+        Q = Q.expand(x.shape[0], *Q.shape[1:])
+
+        return bquad(Q, diff_goal)
 
     def action_cost(self, u, t=0, terminal=False):
 

@@ -171,7 +171,7 @@ class Dx(nn.Module):
 
     def normalize(self, inputs):
         nb, dim = inputs.shape
-        inputs = self.embed(inputs.view(1, nb, dim)).view(nb, dim + self.nq)
+        # inputs = self.embed(inputs.view(1, nb, dim)).view(nb, dim + self.nq)
         mu = inputs.mean(dim=0)
         sigma = inputs.std(dim=0)
         sigma[sigma < 1e-12] = 1.0
@@ -223,14 +223,14 @@ class Dx(nn.Module):
 class DefaultDx(Dx):
     def __init__(self, ensemble_size, nx, nq, na, first_joint_id=0):
         super().__init__(ensemble_size, nx, nq, na, first_joint_id)
-        self.lin0_w, self.lin0_b = get_affine_params(self.ensemble_size, self.nin + self.nq, 300)
+        self.lin0_w, self.lin0_b = get_affine_params(self.ensemble_size, self.nin, 300)
         self.lin1_w, self.lin1_b = get_affine_params(self.ensemble_size, 300, 300)
         self.lin2_w, self.lin2_b = get_affine_params(self.ensemble_size, 300, 300)
         self.lin3_w, self.lin3_b = get_affine_params(self.ensemble_size, 300, 300)
         self.lin4_w, self.lin4_b = get_affine_params(self.ensemble_size, 300, self.nout)
         
     def forward(self, inputs, return_logvar=False):
-        inputs = self.embed(inputs)
+        # inputs = self.embed(inputs)
 
         inputs = (inputs - self.data_mu) / self.data_sigma
 
