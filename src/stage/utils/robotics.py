@@ -71,7 +71,7 @@ class ForwardKinematics(nn.Module):
         T = torch.bmm(self.joints.repeat(nb, 1, 1), Tq)
         T = T.reshape(nb, -1, 4, 4)
         T_world = beye(nb, 4, 4)
-        for j in range(nq):
+        for j in range(idx):
             T_world = torch.bmm(T_world, T[:, j, :, :])
         T_local = self.links[idx, :, :]
         T_local = T_local.unsqueeze(0).repeat(nb, 1, 1)

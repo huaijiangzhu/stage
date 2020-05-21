@@ -25,7 +25,9 @@ class KukaReaching(Task):
     env_name = "Kuka-v0"
     task_horizon = 150
     nq, nv, nu, nx = 7, 7, 7, 14
-    goal = np.array([0.2, 0.5, 0.1])
+    start = np.array([0.4, -0.5, 0.1])
+    goal = np.array([0.4, 0.5, 0.1])
+    obstacle = np.array([0.4, 0., 0.1])
     
 
     def __init__(self,
@@ -37,6 +39,11 @@ class KukaReaching(Task):
         super().__init__(dt_env, dt_control, self.cost, render)
         self.update_goal(self.goal, noise_std=0)
 
+        # move to initial pose
+        self.q_start = p.calculateInverseKinematics(self.env.robot_id,
+                                                    6,
+                                                    self.start)
+        self.env.set_state(self.q_start, np.zeros(self.nv))
         self.q_ub = torch.Tensor(self.env.q_ub)
         self.q_lb = torch.Tensor(self.env.q_lb)
 
@@ -83,11 +90,12 @@ class KukaReaching(Task):
         return data, log
 
     def reset(self, goal=None, noise_std=0):
-        super().reset()
         if goal is None:
             goal = self.goal
         self.update_goal(goal, noise_std)
-        obs, _, _, _ = self.env.reset()
+        q = self.q_start
+        v = np.zeros(self.nv)
+        obs, _, _, _ = self.env.reset((q, v))
         x = torch.Tensor(obs[:self.nx])
         return x
 
@@ -99,9 +107,13 @@ class DefaultCost(Cost):
         self.nu = 7
         self.desired = torch.zeros(self.nx)
         self.fwk = ForwardKinematics(self.nq, JOINT_XYZ, JOINT_RPY, JOINT_AXIS, LINK_XYZ)
-        self.Q = torch.diag(torch.Tensor([1,1,1,1,1,1,1,0,0,0,0,0,0,0])).unsqueeze(0)
-        self.R = 1e-6 * torch.eye(self.nu).unsqueeze(0)
+        self.Q_ee = beye(1, 3, 3)
+        self.Q_state = torch.diag(torch.Tensor([1,1,1,1,1,1,1,0,0,0,0,0,0,0])).unsqueeze(0)
+        self.R = 1e-6 * beye(1, self.nu, self.nu)
         self.d = AutoDiff()
+
+        self.goal = torch.Tensor([0.4, 0.5, 0.1])
+        self.obstacle = torch.Tensor([0.4, 0., 0.1])
 
     def forward(self, x, u, t=0, terminal=False):
 
@@ -123,24 +135,23 @@ class DefaultCost(Cost):
 
         return cost
 
-    # def obs_cost(self, x, t=0, terminal=False):
-        
-    #     x = x[:, :self.nx]
-    #     diffx = x - self.desired
-    #     Q = self.Q.expand(x.shape[0], *self.Q.shape[1:])
-    #     return bquad(Q, diffx)
-
     def obs_cost(self, x, t=0, terminal=False):
         
         q = x[:, :self.nq]
-        ee_pos = self.fwk(q, 1)[:, :3, 3]
-        # obstacle_pos = torch.Tensor([1.0960, 0.0000, 1.1710])
-        # diff_obstacle = ee_pos - obstacle_pos
-        diff_goal = ee_pos - torch.Tensor([0.2, 0.5, 0.1])
-        Q = beye(1, 3, 3)
-        Q = Q.expand(x.shape[0], *Q.shape[1:])
+        ee = self.fwk(q, 6)[:, :3, 3]
+        diff_obstacle = ee - self.obstacle
+        diff_goal = ee - self.goal
+        
+        Q = self.Q_ee.expand(q.shape[0], *self.Q_ee.shape[1:])
+        cost_goal = bquad(Q, diff_goal)
+        cost_obstacle = 10 * torch.exp(- 100 * bquad(Q, diff_obstacle))
 
-        return bquad(Q, diff_goal)
+        x = x[:, :self.nx]
+        diff_state = x - self.desired
+        Q = self.Q_state.expand(x.shape[0], *self.Q_state.shape[1:])
+        cost_state = bquad(Q, diff_state)
+
+        return cost_goal + cost_state
 
     def action_cost(self, u, t=0, terminal=False):
 

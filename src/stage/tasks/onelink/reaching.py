@@ -60,7 +60,6 @@ class OneLinkReaching(Task):
         return data, log
 
     def reset(self, goal=None, noise=False):
-        super().reset()
         if goal is None:
             goal = self.goal
         self.update_goal(goal, noise)

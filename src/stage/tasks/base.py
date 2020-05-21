@@ -17,7 +17,7 @@ class Task(object):
         self.env = gym.make(self.env_name, dt=dt_env, cost=cost, do_render=render)
 
     def reset(self):
-        self.env.reset()
+        raise NotImplementedError
 
     def unroll(self, obs, controller, params_generator=None, random=False):
 

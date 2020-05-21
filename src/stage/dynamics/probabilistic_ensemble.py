@@ -17,11 +17,12 @@ import pdb
 class ProbabilisticEnsemble(Dynamics):
     def __init__(self, nx, nq, nv, na, dt, dx, 
                  ensemble_size=5,
-                 learning_rate=0.005):
+                 learning_rate=0.01):
         super().__init__(nx, nq, nv, na, dt)
         self.nin = self.nx + self.na
         self.nout = 2 * self.nx
         self.dx = dx(ensemble_size, self.nx, self.nq, self.na)
+        # self.opt = optim.SGD(self.dx.parameters(), lr=learning_rate)
         self.opt = optim.Adam(self.dx.parameters(), lr=learning_rate)
         self.ensemble_size = ensemble_size
         self.d = AutoDiffEnsemble()
@@ -128,7 +129,7 @@ class ProbabilisticEnsemble(Dynamics):
         reshaped = transposed.contiguous().view(-1, dim)
         return reshaped
 
-    def learn(self, data, epochs, batch_size=32, verbose=False):
+    def learn(self, data, epochs, batch_size=64, verbose=False):
         self.dx.normalize(data[:, :self.nin])
         dataloader = DataLoader(data, batch_size=batch_size, shuffle=True)
         epoch_range = tqdm.trange(epochs, unit="epoch(s)", desc="Network training", disable=not verbose)

@@ -10,14 +10,13 @@ from stage.controllers.trivial import RandomController
 from tqdm import trange
 
 class LearnAndControlModel(Learner):
-    epochs = 10
-    batch_size = 64
-    learning_rate = 0.001
 
-    def __init__(self, task, dynamics, controller):
+    def __init__(self, task, dynamics, controller, epochs=10, batch_size=64):
         super().__init__(task)
         self.dynamics = dynamics
         self.controller = controller
+        self.epochs = epochs
+        self.batch_size = batch_size
     
     def learn(self, iteration, verbose=False):
         logs = []

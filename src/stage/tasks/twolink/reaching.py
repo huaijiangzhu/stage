@@ -65,13 +65,12 @@ class TwoLinkReaching(Task):
         return data, log
 
     def reset(self, goal=None, noise_std=0.1):
-        super().reset()
         if goal is None:
             goal = self.goal
         self.update_goal(goal, noise_std)
         q = np.array([0.75 * np.pi, 0]) 
         if noise_std > 0:
-         q += np.random.normal(loc=0, scale=noise_std, size=(self.nq))
+            q += np.random.normal(loc=0, scale=noise_std, size=(self.nq))
         v = np.zeros(self.nv)
         obs, _, _, _ = self.env.reset((q, v))
         x = torch.Tensor(obs[:self.nx])
@@ -87,7 +86,6 @@ class DefaultCost(Cost):
         self.fwk = ForwardKinematics(self.nq, JOINT_XYZ, JOINT_RPY, JOINT_AXIS, LINK_XYZ)
         self.desired = torch.zeros(self.nx)
         self.desired_ee_pos = torch.Tensor([0, 0, 1.625])
-        self.Q = torch.diag(torch.Tensor([1,1,0,0])).unsqueeze(0)
         self.R = 1e-5 * torch.eye(self.nu).unsqueeze(0)
         self.d = AutoDiff()
 
@@ -111,75 +109,29 @@ class DefaultCost(Cost):
 
         return cost
 
-    # # state-space cost
-    # def obs_cost(self, x, t=0, terminal=False):
-        
-    #     x = x[:, :self.nx]
-    #     diffx = x - self.desired
-    #     Q = self.Q.expand(x.shape[0], *self.Q.shape[1:])
-
-    #     return bquad(Q, diffx)
-
-    # task-space cost
-    
     def obs_cost(self, x, t=0, terminal=False):
+        
+        x = x[:, :self.nx]
+        diffx = x - self.desired
+        Q = torch.diag(torch.Tensor([1,1,0,0])).unsqueeze(0)
+        Q = Q.expand(x.shape[0], *self.Q.shape[1:])
+        cost_goal = bquad(Q, diffx)
         
         q = x[:, :self.nq]
         ee_pos = self.fwk(q, 1)[:, :3, 3]
         obstacle_pos = torch.Tensor([1.0960, 0.0000, 1.1710])
-        diff_goal = ee_pos - self.desired_ee_pos
+        # diff_goal = ee_pos - self.desired_ee_pos
         diff_obstacle = ee_pos - obstacle_pos
         Q = beye(1, 3, 3)
         Q = Q.expand(x.shape[0], *Q.shape[1:])
+        cost_obstacle = 10 * torch.exp(- 100 * bquad(Q,diff_obstacle))
 
-        return bquad(Q, diff_goal) + 10 * torch.exp(- 100 * bquad(Q,diff_obstacle))
+        return cost_goal + cost_obstacle
 
     def action_cost(self, u, t=0, terminal=False):
 
         R = self.R.expand(u.shape[0], *self.R.shape[1:])
         return bquad(R, u)
-
-    # ### for DDP
-
-    # def l(self, x, a, t=0, terminal=False, diff=False):
-    #     if diff:
-    #         x, a = renew(x), renew(a)
-    #         x.requires_grad = True
-    #         a.requires_grad = True
-
-    #     if x.ndimension() == 1:
-    #         x = x.unsqueeze(0)
-    #     if a.ndimension() == 1:
-    #         a = a.unsqueeze(0) 
-
-    #     u = self.actor(x, a)
-    #     cost = self.forward(x, u, t, terminal)
-
-    #     if diff:
-    #         cost.lx = flatten_non_batch(self.lx(cost.l, x, a, t))
-    #         cost.lxx = self.lxx(cost.lx, x, a, t)
-
-    #         if not terminal:
-    #             cost.la = flatten_non_batch(self.la(cost.l, x, a, t))
-    #             cost.lax = self.lax(cost.la, x, a, t)
-    #             cost.laa = self.laa(cost.la, x, a, t)
-
-    #     return cost
-
-    # def lx(self, l, x, a, t):
-    #     return self.d(l, x)
-
-    # def lxx(self, lx, x, a, t):
-    #     return self.d(lx, x)
-
-    # def la(self, l, x, a, t):
-    #     return self.d(l, a)
-
-    # def laa(self, la, x, a, t):
-    #     return self.d(la, a)
-
-    # def lax(self, la, x, a, t):
-    #     return self.d(la, x)
 
 
 
