@@ -21,4 +21,4 @@ JOINT_RPY = torch.Tensor([[0, 0, 0],
 
 JOINT_AXIS = torch.Tensor([0, 0, 1]).repeat(7,1)
 
-LINK_XYZ = torch.Tensor([0.0, 0.0, 0.0]).repeat(7, 1)
+LINK_XYZ = torch.Tensor([0., 0., 0.]).repeat(7, 1)

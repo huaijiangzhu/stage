@@ -23,11 +23,10 @@ from stage.tasks.kuka.params import JOINT_XYZ, JOINT_RPY, JOINT_AXIS, LINK_XYZ
 
 class KukaReaching(Task):
     env_name = "Kuka-v0"
-    task_horizon = 150
+    task_horizon = 200
     nq, nv, nu, nx = 7, 7, 7, 14
-    start = np.array([0.4, -0.5, 0.1])
-    goal = np.array([0.4, 0.5, 0.1])
-    obstacle = np.array([0.4, 0., 0.1])
+    start = np.array([0.4, -0.5, 0])
+    goal = np.array([0.4, 0.5, 0])
     
 
     def __init__(self,
@@ -37,15 +36,15 @@ class KukaReaching(Task):
 
         self.cost = DefaultCost()
         super().__init__(dt_env, dt_control, self.cost, render)
-        self.update_goal(self.goal, noise_std=0)
 
-        # move to initial pose
+        self.q_ub = torch.Tensor(self.env.q_ub)
+        self.q_lb = torch.Tensor(self.env.q_lb)
+
         self.q_start = p.calculateInverseKinematics(self.env.robot_id,
                                                     6,
                                                     self.start)
-        self.env.set_state(self.q_start, np.zeros(self.nv))
-        self.q_ub = torch.Tensor(self.env.q_ub)
-        self.q_lb = torch.Tensor(self.env.q_lb)
+        self.reset(goal=self.goal, noise_std=0)
+
 
     def update_goal(self, goal, noise_std=0):
         if noise_std > 0:
@@ -90,13 +89,15 @@ class KukaReaching(Task):
         return data, log
 
     def reset(self, goal=None, noise_std=0):
-        if goal is None:
-            goal = self.goal
-        self.update_goal(goal, noise_std)
+
         q = self.q_start
         v = np.zeros(self.nv)
         obs, _, _, _ = self.env.reset((q, v))
         x = torch.Tensor(obs[:self.nx])
+
+        if goal is None:
+            goal = self.goal
+        self.update_goal(goal, noise_std)
         return x
 
 class DefaultCost(Cost):
@@ -112,8 +113,8 @@ class DefaultCost(Cost):
         self.R = 1e-6 * beye(1, self.nu, self.nu)
         self.d = AutoDiff()
 
-        self.goal = torch.Tensor([0.4, 0.5, 0.1])
-        self.obstacle = torch.Tensor([0.4, 0., 0.1])
+        self.goal = torch.Tensor([0.4, 0.5, 0])
+        self.obstacle = torch.Tensor([0.4, 0., 0])
 
     def forward(self, x, u, t=0, terminal=False):
 
@@ -151,7 +152,7 @@ class DefaultCost(Cost):
         Q = self.Q_state.expand(x.shape[0], *self.Q_state.shape[1:])
         cost_state = bquad(Q, diff_state)
 
-        return cost_goal + cost_state
+        return cost_state + cost_goal
 
     def action_cost(self, u, t=0, terminal=False):
 

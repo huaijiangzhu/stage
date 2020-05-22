@@ -65,15 +65,17 @@ class TwoLinkReaching(Task):
         return data, log
 
     def reset(self, goal=None, noise_std=0.1):
-        if goal is None:
-            goal = self.goal
-        self.update_goal(goal, noise_std)
+        
         q = np.array([0.75 * np.pi, 0]) 
         if noise_std > 0:
             q += np.random.normal(loc=0, scale=noise_std, size=(self.nq))
         v = np.zeros(self.nv)
         obs, _, _, _ = self.env.reset((q, v))
         x = torch.Tensor(obs[:self.nx])
+
+        if goal is None:
+            goal = self.goal
+        self.update_goal(goal, noise_std)
         return x
 
 
