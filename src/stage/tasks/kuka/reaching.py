@@ -23,7 +23,7 @@ from stage.tasks.kuka.params import JOINT_XYZ, JOINT_RPY, JOINT_AXIS, LINK_XYZ
 
 class KukaReaching(Task):
     env_name = "Kuka-v0"
-    task_horizon = 200
+    task_horizon = 150
     nq, nv, nu, nx = 7, 7, 7, 14
     start = np.array([0.4, -0.5, 0])
     goal = np.array([0.4, 0.5, 0])
@@ -152,7 +152,7 @@ class DefaultCost(Cost):
         Q = self.Q_state.expand(x.shape[0], *self.Q_state.shape[1:])
         cost_state = bquad(Q, diff_state)
 
-        return cost_state + cost_goal
+        return cost_goal
 
     def action_cost(self, u, t=0, terminal=False):
 
