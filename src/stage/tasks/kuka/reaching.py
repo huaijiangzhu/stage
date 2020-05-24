@@ -108,13 +108,14 @@ class DefaultCost(Cost):
         self.nu = 7
         self.desired = torch.zeros(self.nx)
         self.fwk = ForwardKinematics(self.nq, JOINT_XYZ, JOINT_RPY, JOINT_AXIS, LINK_XYZ)
-        self.Q_ee = beye(1, 3, 3)
+        self.Q_goal = beye(1, 3, 3)
+        self.Q_obstacle = torch.diag(torch.Tensor([1,1,0])).unsqueeze(0)
         self.Q_state = torch.diag(torch.Tensor([1,1,1,1,1,1,1,0,0,0,0,0,0,0])).unsqueeze(0)
-        self.R = 1e-6 * beye(1, self.nu, self.nu)
+        self.R = 1e-5 * beye(1, self.nu, self.nu)
         self.d = AutoDiff()
 
         self.goal = torch.Tensor([0.4, 0.5, 0])
-        self.obstacle = torch.Tensor([0.4, 0., 0])
+        self.obstacle = torch.Tensor([0.4, 0.0, 0.0])
 
     def forward(self, x, u, t=0, terminal=False):
 
@@ -143,16 +144,17 @@ class DefaultCost(Cost):
         diff_obstacle = ee - self.obstacle
         diff_goal = ee - self.goal
         
-        Q = self.Q_ee.expand(q.shape[0], *self.Q_ee.shape[1:])
-        cost_goal = bquad(Q, diff_goal)
-        cost_obstacle = 10 * torch.exp(- 100 * bquad(Q, diff_obstacle))
+        Q_goal = self.Q_goal.expand(q.shape[0], *self.Q_goal.shape[1:])
+        Q_obstacle = self.Q_obstacle.expand(q.shape[0], *self.Q_obstacle.shape[1:])
+        cost_goal = bquad(Q_goal, diff_goal)
+        cost_obstacle = 10 * torch.exp(- 200 * bquad(Q_obstacle, diff_obstacle))
 
         x = x[:, :self.nx]
         diff_state = x - self.desired
-        Q = self.Q_state.expand(x.shape[0], *self.Q_state.shape[1:])
-        cost_state = bquad(Q, diff_state)
+        Q_state = self.Q_state.expand(x.shape[0], *self.Q_state.shape[1:])
+        cost_state = bquad(Q_state, diff_state)
 
-        return cost_goal
+        return cost_goal + cost_obstacle
 
     def action_cost(self, u, t=0, terminal=False):
 

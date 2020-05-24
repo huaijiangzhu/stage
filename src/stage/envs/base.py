@@ -63,7 +63,7 @@ class BaseEnv(gym.Env):
         self.nj = p.getNumJoints(self.robot_id)
         self.bullet_joint_ids = np.arange(self.nj)
         self.initialize_robot(init_state)
-        p.setGravity(0, 0, 0)
+        p.setGravity(0, 0, -9.81)
         return self.get_state()
 
     def close(self):
